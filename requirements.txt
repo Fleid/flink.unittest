@@ -1,5 +1,8 @@
 pyyaml>=6.0
 duckdb>=0.9.0
 
+# Optional: install for SQL lint checks (--lint flag)
+# sqlglot>=20.0
+
 # Optional: install for real Flink SQL semantics (streaming windows, watermarks)
 # apache-flink>=1.18.0

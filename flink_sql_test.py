@@ -7,6 +7,7 @@ Usage:
     python flink_sql_test.py tests/ --backend duckdb     # Force DuckDB backend
     python flink_sql_test.py tests/ --backend flink      # Force PyFlink backend
     python flink_sql_test.py tests/ --strict             # Enforce strict column projection
+    python flink_sql_test.py tests/ --lint               # Run SQL lint checks before execution
 """
 
 import argparse
@@ -97,7 +98,20 @@ def main():
         action="store_true",
         help="Enforce strict column projection on all tests (no extra columns, exact order)",
     )
+    parser.add_argument(
+        "--lint",
+        action="store_true",
+        help="Run SQL lint checks before test execution (requires sqlglot for AST rules)",
+    )
     args = parser.parse_args()
+
+    # Set up linter if requested
+    lint_enabled = args.lint
+    if lint_enabled:
+        from linter import lint_available, lint_test, LintLevel
+        if not lint_available():
+            print(f"{YELLOW}Lint: sqlglot not installed -- only context-based checks will run. "
+                  f"Install with: pip install sqlglot{RESET}")
 
     # Load all tests
     all_tests = []
@@ -120,6 +134,8 @@ def main():
     passed_count = 0
     failed_count = 0
     skipped_count = 0
+    lint_warn_count = 0
+    lint_error_count = 0
     results = []
 
     for file_path, test in all_tests:
@@ -144,6 +160,17 @@ def main():
                 continue
 
         backend = backends[backend_name]
+
+        # Run lint checks if enabled
+        if lint_enabled:
+            lint_results = lint_test(test)
+            for lr in lint_results:
+                color = YELLOW if lr.level == LintLevel.WARN else RED
+                print(f"  {color}{lr.level.value}{RESET} {test.name}: {lr.message}")
+                if lr.level == LintLevel.WARN:
+                    lint_warn_count += 1
+                else:
+                    lint_error_count += 1
 
         # Run the test
         passed, message, duration = run_test(test, backend, strict_override=args.strict)
@@ -176,6 +203,14 @@ def main():
     if skipped_count:
         parts.append(f"{YELLOW}{skipped_count} skipped{RESET}")
     print(f"{BOLD}{total} tests:{RESET} {', '.join(parts)}")
+
+    if lint_enabled and (lint_warn_count or lint_error_count):
+        lint_parts = []
+        if lint_warn_count:
+            lint_parts.append(f"{lint_warn_count} warning(s)")
+        if lint_error_count:
+            lint_parts.append(f"{lint_error_count} error(s)")
+        print(f"{YELLOW}Lint: {', '.join(lint_parts)}{RESET}")
 
     sys.exit(1 if failed_count > 0 else 0)
 

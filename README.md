@@ -218,7 +218,7 @@ Tests that require PyFlink are gracefully skipped if it's not installed.
 ## CLI usage
 
 ```
-python flink_sql_test.py [paths...] [--backend duckdb|flink|auto] [--strict]
+python flink_sql_test.py [paths...] [--backend duckdb|flink|auto] [--strict] [--lint]
 ```
 
 - Pass files or directories. Directories are scanned for `*.yaml` and `*.yml` files.
@@ -242,6 +242,40 @@ python flink_sql_test.py tests/ --strict
 ```
 
 The `--strict` flag applies strict column projection globally -- every test will fail if its actual output has extra columns, missing columns, or columns in the wrong order. This is equivalent to setting `strict: true` on every test's `expect` block. The CLI flag and the per-test YAML setting are OR'd together, so individual tests can still opt in via YAML without the global flag.
+
+## Linting
+
+The `--lint` flag runs SQL lint checks on each test before execution. Lint warnings and errors are printed inline above the test result.
+
+```bash
+pip install sqlglot    # optional, enables AST-based rules
+python flink_sql_test.py tests/ --lint
+```
+
+```
+  WARN test_name: SELECT * is fragile -- consider listing columns explicitly
+  PASS test_name [duckdb, 2ms]
+
+==================================================
+1 tests: 1 passed
+Lint: 1 warning(s)
+```
+
+### Lint rules
+
+| Rule | Level | Category | What it checks |
+|---|---|---|---|
+| `select-star` | WARN | AST | `SELECT *` in projection (excluding `COUNT(*)`) |
+| `unqualified-column-in-join` | WARN | AST | Columns without table alias in queries with JOINs |
+| `group-by-mismatch` | ERROR | AST | Column in SELECT not in GROUP BY and not aggregated |
+| `missing-watermark` | WARN | Context | Windowed query (`TUMBLE`/`HOP`/`SESSION`/`CUMULATE`) but input table has no watermark |
+| `temporal-join-missing-pk` | WARN | Context | `FOR SYSTEM_TIME AS OF` but no table declares a primary key |
+
+**AST rules** require `sqlglot` to be installed. They parse the SQL into an AST and inspect the tree. If sqlglot is not installed, these rules are silently skipped (a warning is printed once at startup).
+
+**Context rules** use regex matching on the SQL text combined with `TestCase` metadata (watermarks, primary keys). They always run regardless of whether sqlglot is installed.
+
+AST-based rules are automatically skipped for queries containing Flink-specific syntax (`TUMBLE`, `HOP`, `SESSION`, `CUMULATE`, `MATCH_RECOGNIZE`, `FOR SYSTEM_TIME AS OF`) since SQLGlot cannot reliably parse these constructs. Context-based rules still fire for these queries.
 
 ## Failure output
 
@@ -282,6 +316,7 @@ flink-sql-test/
 ├── flink_sql_test.py       # CLI entry point
 ├── models.py               # YAML parsing + data models
 ├── comparator.py           # Result comparison + diff output
+├── linter.py               # SQL lint rules (AST + context-based)
 ├── backends/
 │   ├── base.py             # Abstract backend interface
 │   ├── duckdb_backend.py   # DuckDB (instant, pure SQL)

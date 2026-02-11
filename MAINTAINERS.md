@@ -18,10 +18,11 @@
                         │     flink_sql_test.py        │
                         │                              │
                         │  1. Load tests               │
-                        │  2. Auto-detect backend      │
-                        │  3. Dispatch to backend      │
-                        │  4. Compare results          │
-                        │  5. Print report             │
+                        │  2. Lint checks (--lint)      │
+                        │  3. Auto-detect backend      │
+                        │  4. Dispatch to backend      │
+                        │  5. Compare results          │
+                        │  6. Print report             │
                         └──────┬───────────┬───────────┘
                                │           │
                    ┌───────────▼───┐   ┌───▼───────────────┐
@@ -56,6 +57,7 @@ Key decisions it makes:
 - **Lazy init**: Backends are created on first use and cached in a `dict`. PyFlink is never imported unless a test actually needs it.
 - **Graceful skip**: If a test needs Flink but `apache-flink` isn't installed, the `ImportError` is caught and the test is reported as `SKIP`, not `FAIL`.
 - **CLI-level strict mode**: The `--strict` flag applies strict column projection to all tests. It is OR'd with the per-test `expect.strict` YAML setting in `run_test()`, so either the CLI flag or the YAML field can enable strict mode for a given test.
+- **Lint integration**: The `--lint` flag imports from `linter.py` and runs `lint_test()` on each test before execution. Lint results (WARN/ERROR) are printed inline above the test result. Lint counts are tracked and shown in the summary. The linter import is lazy (only when `--lint` is passed), matching the pattern used for backend imports.
 
 ### `models.py` -- YAML parsing and data model
 
@@ -95,6 +97,20 @@ Compares `list[dict]` actual vs expected. Four features to know about:
 3. **Order independence**: By default, both sides are sorted by `_row_sort_key` (alphabetical key-value tuples). Set `ordered: true` in the YAML to compare in the order given.
 
 4. **Type coercion** (`_normalize_value`): Decimal -> float, datetime/date -> string, float rounded to 6 decimal places, strings stripped. This handles the mismatch between what DuckDB returns (Python native types) and what the YAML defines.
+
+### `linter.py` -- SQL lint rules
+
+Provides pre-execution lint checks for test SQL. SQLGlot is an optional dependency (lazy-imported via `try/except`, same pattern as PyFlink).
+
+**Two categories of rules:**
+
+1. **AST rules** (require sqlglot): Parse SQL with `sqlglot.parse(sql, error_level=sqlglot.ErrorLevel.WARN)` for best-effort parsing. SQLGlot has no native Flink dialect, so Flink-specific syntax (TUMBLE, HOP, temporal joins, MATCH_RECOGNIZE) is detected via `FLINK_SPECIFIC_PATTERN` regex and AST rules are skipped entirely for those queries to avoid false positives.
+
+2. **Context rules** (no sqlglot needed): Use regex matching on the SQL text combined with `TestCase` metadata (watermarks, primary keys). These always run.
+
+**`_parse_sql()`** is the gatekeeper for AST rules. It returns `None` (causing the rule to skip) if the SQL matches `FLINK_SPECIFIC_PATTERN`. It also temporarily sets the `sqlglot` logger to `CRITICAL` during parsing to suppress WARN-level messages that SQLGlot emits for unrecognized syntax.
+
+**Rule functions** all have the signature `(test: TestCase) -> list[LintResult]` and are registered in `AST_RULES` or `CONTEXT_RULES` lists. The entry point `lint_test()` iterates both lists.
 
 ### `backends/base.py` -- Backend interface
 
@@ -227,3 +243,4 @@ Common extension points:
 | New table DDL constraint (e.g., unique key) | `TableInput` dataclass + `_parse_table_input()` in `models.py`, `_create_table()` in `flink_backend.py` (see `primary_key` as an example) |
 | New CLI flag | `argparse` block in `flink_sql_test.py:main()` |
 | New auto-detection rule | `detect_backend()` in `flink_sql_test.py` and `_needs_streaming()` in `flink_backend.py` |
+| New lint rule | Add function with signature `(TestCase) -> list[LintResult]` in `linter.py`, register in `AST_RULES` or `CONTEXT_RULES` list |
