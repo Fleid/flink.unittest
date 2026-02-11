@@ -45,3 +45,55 @@ tests:
       rows:
         - {id: 1, name_upper: 'ALICE'}
         - {id: 2, name_upper: 'BOB'}
+
+  # Parquet input (requires pyarrow)
+  - name: test_parquet_input
+    sql: |
+      SELECT region, SUM(amount) AS total
+      FROM orders
+      GROUP BY region
+    given:
+      orders:
+        rows_file: data/orders.parquet
+    expect:
+      rows:
+        - {region: 'EU', total: 150}
+        - {region: 'US', total: 300}
+
+  # Avro input (requires fastavro)
+  - name: test_avro_input
+    sql: |
+      SELECT id, UPPER(name) AS name_upper
+      FROM users
+      WHERE active = true
+    given:
+      users:
+        rows_file: data/users.avro
+    expect:
+      rows:
+        - {id: 1, name_upper: 'ALICE'}
+        - {id: 2, name_upper: 'BOB'}
+
+  # Parquet expected output
+  - name: test_parquet_expect
+    sql: |
+      SELECT region, SUM(amount) AS total
+      FROM orders
+      GROUP BY region
+    given:
+      orders:
+        rows_file: data/orders.csv
+    expect:
+      rows_file: data/expected_revenue.parquet
+
+  # Avro expected output
+  - name: test_avro_expect
+    sql: |
+      SELECT id, UPPER(name) AS name_upper
+      FROM users
+      WHERE active = true
+    given:
+      users:
+        rows_file: data/users.jsonl
+    expect:
+      rows_file: data/expected_users.avro
