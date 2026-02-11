@@ -1,0 +1,7 @@
+-- A comment
+
+SELECT
+  region,
+  SUM(amount) AS total
+FROM orders
+GROUP BY region;

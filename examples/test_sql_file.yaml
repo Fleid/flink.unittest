@@ -1,0 +1,15 @@
+# Demonstrates referencing SQL from an external file instead of inlining it.
+# The sql_file path is resolved relative to this YAML file's directory.
+
+tests:
+  - name: test_revenue_from_file
+    sql_file: sql/revenue_by_region.sql
+    given:
+      orders:
+        - {region: 'US', amount: 100}
+        - {region: 'US', amount: 200}
+        - {region: 'EU', amount: 150}
+    expect:
+      rows:
+        - {region: 'EU', total: 150}
+        - {region: 'US', total: 300}

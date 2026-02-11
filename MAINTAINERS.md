@@ -66,7 +66,7 @@ Defines the core data structures and handles all YAML deserialization.
 ```
 TestCase
 ├── name: str
-├── sql: str
+├── sql: str                     # resolved from inline 'sql' or 'sql_file'
 ├── backend: str | None          # None = auto-detect
 ├── given: list[TableInput]
 │   ├── name: str
@@ -83,6 +83,8 @@ TestCase
 **Two input formats** are supported:
 1. **Shorthand** -- `given.tablename: [{col: val}, ...]` -- types are inferred from Python values via `_infer_type`.
 2. **Explicit** -- `given.tablename: {schema: [...], watermark: "...", rows: [...]}` -- the schema block provides Flink SQL type strings and an optional watermark expression.
+
+**SQL source resolution**: `_parse_test()` accepts `sql` (inline) or `sql_file` (relative path to a `.sql` file). They are mutually exclusive. `sql_file` paths are resolved relative to the YAML file's parent directory (the `base_dir` parameter passed from `load_test_file()`). The file is read at parse time, so downstream code always sees a plain SQL string regardless of source. This pattern is designed to be reused for future `rows_file` support on `given` tables and `expect` blocks.
 
 Type inference rules (`_infer_type`): `bool` -> BOOLEAN, `int` -> INT, `float` -> DOUBLE, `Decimal` -> DECIMAL(10,2), `datetime` -> TIMESTAMP(3), `date` -> DATE, everything else -> STRING.
 

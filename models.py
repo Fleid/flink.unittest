@@ -92,10 +92,26 @@ def _parse_table_input(name: str, table_def: dict) -> TableInput:
     return TableInput(name=name, rows=rows, schema=schema, watermark=watermark, primary_key=primary_key)
 
 
-def _parse_test(test_def: dict) -> TestCase:
+def _parse_test(test_def: dict, base_dir: Path) -> TestCase:
     """Parse a single test case from YAML."""
     name = test_def["name"]
-    sql = test_def["sql"].strip()
+
+    # SQL: inline or from file (mutually exclusive)
+    has_sql = "sql" in test_def
+    has_sql_file = "sql_file" in test_def
+    if has_sql and has_sql_file:
+        raise ValueError(f"Test '{name}': specify 'sql' or 'sql_file', not both")
+    if not has_sql and not has_sql_file:
+        raise ValueError(f"Test '{name}': must specify 'sql' or 'sql_file'")
+
+    if has_sql_file:
+        sql_path = (base_dir / test_def["sql_file"]).resolve()
+        if not sql_path.is_file():
+            raise FileNotFoundError(f"Test '{name}': sql_file not found: {sql_path}")
+        sql = sql_path.read_text().strip()
+    else:
+        sql = test_def["sql"].strip()
+
     backend = test_def.get("backend")
 
     # Parse given tables
@@ -126,7 +142,8 @@ def load_test_file(path: Path) -> list[TestCase]:
     if not data or "tests" not in data:
         raise ValueError(f"Invalid test file {path}: missing 'tests' key")
 
-    return [_parse_test(t) for t in data["tests"]]
+    base_dir = path.parent
+    return [_parse_test(t, base_dir) for t in data["tests"]]
 
 
 def load_tests(path: Path) -> list[tuple[Path, TestCase]]:

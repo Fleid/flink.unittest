@@ -125,6 +125,26 @@ given:
       - {order_id: 1, line_items: [{item_name: "Widget", quantity: 2}, {item_name: "Gadget", quantity: 1}]}
 ```
 
+### External SQL file
+
+Instead of inlining SQL in the YAML, you can reference an external `.sql` file. The path is resolved relative to the YAML file's directory.
+
+```yaml
+tests:
+  - name: test_revenue_from_file
+    sql_file: sql/revenue_by_region.sql
+    given:
+      orders:
+        - {region: 'US', amount: 100}
+        - {region: 'EU', amount: 150}
+    expect:
+      rows:
+        - {region: 'EU', total: 150}
+        - {region: 'US', total: 100}
+```
+
+`sql` and `sql_file` are mutually exclusive -- specify one or the other.
+
 ### Partial column matching
 
 You don't need to assert every output column. Only the columns listed in `expect.rows` are compared -- extra columns in the actual output are ignored.
@@ -326,5 +346,9 @@ flink-sql-test/
     ├── test_basic.yaml             # Introductory tests
     ├── test_streaming.yaml         # TUMBLE window tests (Flink)
     ├── test_top_patterns.yaml      # Common SQL patterns
-    └── test_streaming_patterns.yaml # Streaming-specific patterns
+    ├── test_streaming_patterns.yaml # Streaming-specific patterns
+    ├── test_sql_file.yaml          # External SQL file reference
+    ├── test_lint_failures.yaml     # Lint rule examples
+    └── sql/                        # External SQL files
+        └── revenue_by_region.sql
 ```
