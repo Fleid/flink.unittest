@@ -147,6 +147,17 @@ def main():
         else:
             backend_name = detect_backend(test)
 
+        # Run lint checks if enabled (before backend init so skipped tests still get linted)
+        if lint_enabled:
+            lint_results = lint_test(test)
+            for lr in lint_results:
+                color = YELLOW if lr.level == LintLevel.WARN else RED
+                print(f"  {color}{lr.level.value}{RESET} {test.name}: {lr.message}")
+                if lr.level == LintLevel.WARN:
+                    lint_warn_count += 1
+                else:
+                    lint_error_count += 1
+
         # Get or create backend instance
         if backend_name not in backends:
             try:
@@ -160,17 +171,6 @@ def main():
                 continue
 
         backend = backends[backend_name]
-
-        # Run lint checks if enabled
-        if lint_enabled:
-            lint_results = lint_test(test)
-            for lr in lint_results:
-                color = YELLOW if lr.level == LintLevel.WARN else RED
-                print(f"  {color}{lr.level.value}{RESET} {test.name}: {lr.message}")
-                if lr.level == LintLevel.WARN:
-                    lint_warn_count += 1
-                else:
-                    lint_error_count += 1
 
         # Run the test
         passed, message, duration = run_test(test, backend, strict_override=args.strict)

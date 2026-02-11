@@ -1,0 +1,105 @@
+# Tests that intentionally trigger lint warnings/errors.
+# Run with: python flink_sql_test.py examples/test_lint_failures.yaml --lint
+
+tests:
+  # Rule: select-star (WARN)
+  # SELECT * is fragile -- consider listing columns explicitly
+  - name: lint_select_star
+    sql: |
+      SELECT * FROM users
+    given:
+      users:
+        - {id: 1, name: 'alice'}
+        - {id: 2, name: 'bob'}
+    expect:
+      rows:
+        - {id: 1, name: 'alice'}
+        - {id: 2, name: 'bob'}
+
+  # Rule: unqualified-column-in-join (WARN)
+  # Columns in a JOIN query should be qualified with table alias
+  - name: lint_unqualified_column_in_join
+    sql: |
+      SELECT name, amount
+      FROM users u
+      JOIN orders o ON u.id = o.user_id
+    given:
+      users:
+        - {id: 1, name: 'alice'}
+      orders:
+        - {user_id: 1, amount: 100}
+    expect:
+      rows:
+        - {name: 'alice', amount: 100}
+
+  # Rule: group-by-mismatch (ERROR)
+  # Column 'name' is in SELECT but not in GROUP BY and not aggregated
+  - name: lint_group_by_mismatch
+    sql: |
+      SELECT region, name, SUM(amount) AS total
+      FROM orders
+      GROUP BY region
+    given:
+      orders:
+        - {region: 'US', name: 'widget', amount: 100}
+        - {region: 'US', name: 'gadget', amount: 200}
+    expect:
+      rows:
+        - {region: 'US', total: 300}
+
+  # Rule: missing-watermark (WARN)
+  # Windowed query but table has no watermark defined
+  - name: lint_missing_watermark
+    backend: flink
+    sql: |
+      SELECT
+        user_id,
+        TUMBLE_START(event_time, INTERVAL '1' HOUR) AS window_start,
+        COUNT(*) AS cnt
+      FROM clicks
+      GROUP BY user_id, TUMBLE(event_time, INTERVAL '1' HOUR)
+    given:
+      clicks:
+        schema:
+          - {name: user_id, type: INT}
+          - {name: event_time, type: "TIMESTAMP(3)"}
+        rows:
+          - {user_id: 1, event_time: '2024-01-01 10:05:00'}
+          - {user_id: 1, event_time: '2024-01-01 10:30:00'}
+    expect:
+      rows:
+        - {user_id: 1, window_start: '2024-01-01 10:00:00', cnt: 2}
+
+  # Rule: temporal-join-missing-pk (WARN)
+  # Temporal join but no table declares a primary key
+  - name: lint_temporal_join_missing_pk
+    backend: flink
+    sql: |
+      SELECT
+        o.order_id,
+        o.currency,
+        o.amount * r.rate AS amount_usd
+      FROM orders o
+      JOIN currency_rates FOR SYSTEM_TIME AS OF o.order_time AS r
+        ON o.currency = r.currency
+    given:
+      orders:
+        schema:
+          - {name: order_id, type: INT}
+          - {name: currency, type: STRING}
+          - {name: amount, type: DOUBLE}
+          - {name: order_time, type: "TIMESTAMP(3)"}
+        watermark: "order_time AS order_time - INTERVAL '5' SECOND"
+        rows:
+          - {order_id: 1, currency: 'EUR', amount: 100.0, order_time: '2024-01-01 10:00:00'}
+      currency_rates:
+        schema:
+          - {name: currency, type: STRING}
+          - {name: rate, type: DOUBLE}
+          - {name: update_time, type: "TIMESTAMP(3)"}
+        watermark: "update_time AS update_time - INTERVAL '5' SECOND"
+        rows:
+          - {currency: 'EUR', rate: 1.10, update_time: '2024-01-01 09:00:00'}
+    expect:
+      rows:
+        - {order_id: 1, amount_usd: 110.0}
