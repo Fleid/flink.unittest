@@ -1,0 +1,62 @@
+# Streaming SQL tests -- requires PyFlink backend
+# These test Flink-specific streaming constructs (TUMBLE, HOP, watermarks).
+
+tests:
+  - name: test_tumble_window_hourly_revenue
+    backend: flink
+    sql: |
+      SELECT
+        window_start,
+        product_id,
+        SUM(amount) AS hourly_revenue,
+        COUNT(*) AS txn_count
+      FROM TABLE(
+        TUMBLE(TABLE orders, DESCRIPTOR(event_time), INTERVAL '1' HOUR)
+      )
+      GROUP BY window_start, product_id
+    given:
+      orders:
+        schema:
+          - {name: product_id, type: STRING}
+          - {name: amount, type: "DECIMAL(10,2)"}
+          - {name: event_time, type: "TIMESTAMP(3)"}
+          - watermark: "event_time AS event_time - INTERVAL '1' SECOND"
+        rows:
+          - {product_id: 'A', amount: 100, event_time: '2024-01-01 10:05:00'}
+          - {product_id: 'A', amount: 200, event_time: '2024-01-01 10:30:00'}
+          - {product_id: 'B', amount: 50,  event_time: '2024-01-01 10:45:00'}
+          - {product_id: 'A', amount: 75,  event_time: '2024-01-01 11:10:00'}
+    expect:
+      rows:
+        - {window_start: '2024-01-01 10:00:00', product_id: 'A', hourly_revenue: 300, txn_count: 2}
+        - {window_start: '2024-01-01 10:00:00', product_id: 'B', hourly_revenue: 50,  txn_count: 1}
+        - {window_start: '2024-01-01 11:00:00', product_id: 'A', hourly_revenue: 75,  txn_count: 1}
+
+  - name: test_tumble_window_user_sessions
+    backend: flink
+    sql: |
+      SELECT
+        window_start,
+        user_id,
+        COUNT(*) AS event_count,
+        SUM(duration_sec) AS total_duration
+      FROM TABLE(
+        TUMBLE(TABLE click_events, DESCRIPTOR(event_time), INTERVAL '5' MINUTE)
+      )
+      GROUP BY window_start, user_id
+    given:
+      click_events:
+        schema:
+          - {name: user_id, type: STRING}
+          - {name: page, type: STRING}
+          - {name: duration_sec, type: INT}
+          - {name: event_time, type: "TIMESTAMP(3)"}
+          - watermark: "event_time AS event_time - INTERVAL '2' SECOND"
+        rows:
+          - {user_id: 'u1', page: '/home',    duration_sec: 10, event_time: '2024-01-01 12:01:00'}
+          - {user_id: 'u1', page: '/product', duration_sec: 30, event_time: '2024-01-01 12:03:00'}
+          - {user_id: 'u2', page: '/home',    duration_sec: 5,  event_time: '2024-01-01 12:02:00'}
+    expect:
+      rows:
+        - {window_start: '2024-01-01 12:00:00', user_id: 'u1', event_count: 2, total_duration: 40}
+        - {window_start: '2024-01-01 12:00:00', user_id: 'u2', event_count: 1, total_duration: 5}

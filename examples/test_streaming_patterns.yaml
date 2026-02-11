@@ -1,0 +1,248 @@
+# Streaming-specific query patterns for Flink SQL.
+# These require the Flink backend (PyFlink) due to streaming constructs.
+
+tests:
+
+  # ──────────────────────────────────────────────────────────────────
+  # Pattern: Window Aggregate (STREAM_WINDOW_TABLE_FUNCTION +
+  #          STREAM_LOCAL_WINDOW_AGGREGATE + STREAM_GLOBAL_WINDOW_AGGREGATE)
+  # ~10K queries -- TUMBLE / HOP windows for time-based aggregation.
+  # ──────────────────────────────────────────────────────────────────
+
+  - name: tumble_window_aggregate
+    backend: flink
+    sql: |
+      SELECT
+        window_start,
+        window_end,
+        region,
+        COUNT(*) AS event_count,
+        SUM(amount) AS total_amount
+      FROM TABLE(
+        TUMBLE(TABLE events, DESCRIPTOR(event_time), INTERVAL '1' HOUR)
+      )
+      GROUP BY window_start, window_end, region
+    given:
+      events:
+        schema:
+          - {name: event_id, type: INT}
+          - {name: region, type: STRING}
+          - {name: amount, type: DOUBLE}
+          - {name: event_time, type: "TIMESTAMP(3)"}
+        watermark: "event_time AS event_time - INTERVAL '5' SECOND"
+        rows:
+          - {event_id: 1, region: 'US', amount: 100.0, event_time: '2024-01-01 10:05:00'}
+          - {event_id: 2, region: 'US', amount: 200.0, event_time: '2024-01-01 10:30:00'}
+          - {event_id: 3, region: 'EU', amount: 150.0, event_time: '2024-01-01 10:15:00'}
+          - {event_id: 4, region: 'US', amount: 300.0, event_time: '2024-01-01 11:05:00'}
+          - {event_id: 5, region: 'EU', amount: 250.0, event_time: '2024-01-01 11:30:00'}
+    expect:
+      rows:
+        - {region: 'EU', event_count: 1, total_amount: 150.0}
+        - {region: 'US', event_count: 2, total_amount: 300.0}
+        - {region: 'EU', event_count: 1, total_amount: 250.0}
+        - {region: 'US', event_count: 1, total_amount: 300.0}
+
+  - name: hop_window_aggregate
+    backend: flink
+    sql: |
+      SELECT
+        window_start,
+        window_end,
+        sensor_id,
+        AVG(temperature) AS avg_temp,
+        MAX(temperature) AS max_temp
+      FROM TABLE(
+        HOP(TABLE sensor_readings, DESCRIPTOR(reading_time), INTERVAL '5' MINUTE, INTERVAL '10' MINUTE)
+      )
+      GROUP BY window_start, window_end, sensor_id
+    given:
+      sensor_readings:
+        schema:
+          - {name: sensor_id, type: STRING}
+          - {name: temperature, type: DOUBLE}
+          - {name: reading_time, type: "TIMESTAMP(3)"}
+        watermark: "reading_time AS reading_time - INTERVAL '5' SECOND"
+        rows:
+          - {sensor_id: 's1', temperature: 22.5, reading_time: '2024-01-01 10:01:00'}
+          - {sensor_id: 's1', temperature: 23.0, reading_time: '2024-01-01 10:06:00'}
+          - {sensor_id: 's1', temperature: 24.5, reading_time: '2024-01-01 10:12:00'}
+    expect:
+      # HOP(slide=5min, size=10min) produces overlapping windows:
+      #   [09:55,10:05) has 10:01        → avg=22.5, max=22.5
+      #   [10:00,10:10) has 10:01, 10:06 → avg=22.75, max=23.0
+      #   [10:05,10:15) has 10:06, 10:12 → avg=23.75, max=24.5
+      #   [10:10,10:20) has 10:12        → avg=24.5,  max=24.5
+      rows:
+        - {sensor_id: 's1', avg_temp: 22.5,  max_temp: 22.5}
+        - {sensor_id: 's1', avg_temp: 22.75, max_temp: 23.0}
+        - {sensor_id: 's1', avg_temp: 23.75, max_temp: 24.5}
+        - {sensor_id: 's1', avg_temp: 24.5,  max_temp: 24.5}
+
+  # ──────────────────────────────────────────────────────────────────
+  # Pattern: OVER Aggregate (STREAM_OVER_AGGREGATE)
+  # 42K queries -- running totals, moving averages, row numbering.
+  # Note: OVER windows can run on DuckDB too for batch semantics.
+  # ──────────────────────────────────────────────────────────────────
+
+  - name: over_aggregate_running_total
+    sql: |
+      SELECT
+        order_id,
+        customer_id,
+        amount,
+        SUM(amount) OVER (
+          PARTITION BY customer_id
+          ORDER BY order_id
+        ) AS running_total,
+        COUNT(*) OVER (
+          PARTITION BY customer_id
+          ORDER BY order_id
+        ) AS order_sequence
+      FROM orders
+    given:
+      orders:
+        - {order_id: 1, customer_id: 10, amount: 100.0}
+        - {order_id: 2, customer_id: 11, amount: 200.0}
+        - {order_id: 3, customer_id: 10, amount: 150.0}
+        - {order_id: 4, customer_id: 10, amount: 50.0}
+        - {order_id: 5, customer_id: 11, amount: 300.0}
+    expect:
+      rows:
+        - {order_id: 1, customer_id: 10, running_total: 100.0, order_sequence: 1}
+        - {order_id: 3, customer_id: 10, running_total: 250.0, order_sequence: 2}
+        - {order_id: 4, customer_id: 10, running_total: 300.0, order_sequence: 3}
+        - {order_id: 2, customer_id: 11, running_total: 200.0, order_sequence: 1}
+        - {order_id: 5, customer_id: 11, running_total: 500.0, order_sequence: 2}
+
+  # ──────────────────────────────────────────────────────────────────
+  # Pattern: Top-N / RANK (STREAM_RANK)
+  # ~4K queries -- finding top rows per partition.
+  # ──────────────────────────────────────────────────────────────────
+
+  - name: top_n_per_partition
+    sql: |
+      SELECT product_id, category, revenue, rn
+      FROM (
+        SELECT
+          product_id,
+          category,
+          revenue,
+          ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) AS rn
+        FROM products
+      )
+      WHERE rn <= 2
+    given:
+      products:
+        - {product_id: 1, category: 'Electronics', revenue: 5000}
+        - {product_id: 2, category: 'Electronics', revenue: 8000}
+        - {product_id: 3, category: 'Electronics', revenue: 3000}
+        - {product_id: 4, category: 'Books',       revenue: 1200}
+        - {product_id: 5, category: 'Books',       revenue: 2500}
+        - {product_id: 6, category: 'Books',       revenue: 800}
+    expect:
+      rows:
+        - {product_id: 5, category: 'Books',       revenue: 2500, rn: 1}
+        - {product_id: 4, category: 'Books',       revenue: 1200, rn: 2}
+        - {product_id: 2, category: 'Electronics', revenue: 8000, rn: 1}
+        - {product_id: 1, category: 'Electronics', revenue: 5000, rn: 2}
+
+  # ──────────────────────────────────────────────────────────────────
+  # Pattern: Temporal Join (STREAM_TEMPORAL_JOIN)
+  # ~5K queries -- joining a stream against a versioned table.
+  # Requires Flink backend.
+  # ──────────────────────────────────────────────────────────────────
+
+  - name: temporal_join_currency_conversion
+    backend: flink
+    sql: |
+      SELECT
+        o.order_id,
+        o.amount,
+        o.currency,
+        r.rate,
+        o.amount * r.rate AS amount_usd
+      FROM orders AS o
+      JOIN currency_rates FOR SYSTEM_TIME AS OF o.order_time AS r
+        ON o.currency = r.currency
+    given:
+      orders:
+        schema:
+          - {name: order_id, type: INT}
+          - {name: amount, type: DOUBLE}
+          - {name: currency, type: STRING}
+          - {name: order_time, type: "TIMESTAMP(3)"}
+        watermark: "order_time AS order_time - INTERVAL '5' SECOND"
+        rows:
+          - {order_id: 1, amount: 100.0, currency: 'EUR', order_time: '2024-01-01 10:00:00'}
+          - {order_id: 2, amount: 200.0, currency: 'GBP', order_time: '2024-01-01 10:05:00'}
+      currency_rates:
+        schema:
+          - {name: currency, type: STRING}
+          - {name: rate, type: DOUBLE}
+          - {name: update_time, type: "TIMESTAMP(3)"}
+        primary_key: [currency]
+        watermark: "update_time AS update_time - INTERVAL '5' SECOND"
+        rows:
+          - {currency: 'EUR', rate: 1.10, update_time: '2024-01-01 09:00:00'}
+          - {currency: 'GBP', rate: 1.27, update_time: '2024-01-01 09:00:00'}
+    expect:
+      rows:
+        - {order_id: 1, amount: 100.0, currency: 'EUR', rate: 1.10, amount_usd: 110.0}
+        - {order_id: 2, amount: 200.0, currency: 'GBP', rate: 1.27, amount_usd: 254.0}
+
+  # ──────────────────────────────────────────────────────────────────
+  # Pattern: Changelog Normalize (STREAM_CHANGELOG_NORMALIZE)
+  # ~117K queries -- reading from compacted/upsert Kafka topics.
+  # This pattern is implicit (Flink adds it for upsert sources),
+  # so we test the SQL pattern that produces it: reading from a
+  # table with primary key and doing lookups/joins.
+  # ──────────────────────────────────────────────────────────────────
+
+  - name: upsert_source_latest_value
+    sql: |
+      SELECT
+        user_id,
+        last_login,
+        status
+      FROM user_profiles
+      WHERE status = 'active'
+    given:
+      user_profiles:
+        - {user_id: 1, last_login: '2024-01-15', status: 'active'}
+        - {user_id: 2, last_login: '2024-01-10', status: 'inactive'}
+        - {user_id: 3, last_login: '2024-01-14', status: 'active'}
+    expect:
+      rows:
+        - {user_id: 1, last_login: '2024-01-15', status: 'active'}
+        - {user_id: 3, last_login: '2024-01-14', status: 'active'}
+
+  # ──────────────────────────────────────────────────────────────────
+  # Pattern: GROUP BY with UNION ALL source
+  # ~2.2K queries -- aggregate across merged streams.
+  # ──────────────────────────────────────────────────────────────────
+
+  - name: union_then_aggregate
+    sql: |
+      SELECT
+        event_type,
+        COUNT(*) AS total_count,
+        SUM(amount) AS total_amount
+      FROM (
+        SELECT event_type, amount FROM stream_a
+        UNION ALL
+        SELECT event_type, amount FROM stream_b
+      )
+      GROUP BY event_type
+    given:
+      stream_a:
+        - {event_type: 'click',    amount: 1.0}
+        - {event_type: 'purchase', amount: 50.0}
+        - {event_type: 'click',    amount: 1.0}
+      stream_b:
+        - {event_type: 'click',    amount: 1.0}
+        - {event_type: 'purchase', amount: 75.0}
+    expect:
+      rows:
+        - {event_type: 'click',    total_count: 3, total_amount: 3.0}
+        - {event_type: 'purchase', total_count: 2, total_amount: 125.0}

@@ -1,0 +1,85 @@
+# Basic SQL logic tests -- runs on DuckDB (instant) or Flink (batch mode)
+# These test pure transformation logic without streaming constructs.
+
+tests:
+  - name: test_order_size_classification
+    sql: |
+      SELECT
+        order_id,
+        customer_id,
+        amount,
+        CASE
+          WHEN amount >= 100 THEN 'large'
+          WHEN amount >= 25 THEN 'mmedium'
+          ELSE 'small'
+        END AS order_size
+      FROM orders
+      WHERE status != 'cancelled'
+    given:
+      orders:
+        - {order_id: 1, customer_id: 10, amount: 150, status: 'completed'}
+        - {order_id: 2, customer_id: 11, amount: 50,  status: 'completed'}
+        - {order_id: 3, customer_id: 12, amount: 10,  status: 'completed'}
+        - {order_id: 4, customer_id: 13, amount: 200, status: 'cancelled'}
+    expect:
+      rows:
+        - {order_id: 1, customer_id: 10, amount: 150, order_size: 'large'}
+        - {order_id: 2, customer_id: 11, amount: 50,  order_size: 'medium'}
+        - {order_id: 3, customer_id: 12, amount: 10,  order_size: 'small'}
+
+  - name: test_customer_revenue_aggregation
+    sql: |
+      SELECT
+        c.customer_id,
+        c.name,
+        SUM(o.amount) AS total_revenue,
+        COUNT(o.order_id) AS order_count
+      FROM customers c
+      JOIN orders o ON c.customer_id = o.customer_id
+      GROUP BY c.customer_id, c.name
+    given:
+      customers:
+        - {customer_id: 1, name: 'Alice'}
+        - {customer_id: 2, name: 'Bob'}
+      orders:
+        - {order_id: 101, customer_id: 1, amount: 50.0}
+        - {order_id: 102, customer_id: 1, amount: 75.0}
+        - {order_id: 103, customer_id: 2, amount: 200.0}
+    expect:
+      rows:
+        - {customer_id: 1, name: 'Alice', total_revenue: 125.0, order_count: 2}
+        - {customer_id: 2, name: 'Bob',   total_revenue: 200.0, order_count: 1}
+
+  - name: test_partial_column_matching
+    sql: |
+      SELECT
+        customer_id,
+        name,
+        UPPER(name) AS name_upper,
+        customer_id * 10 AS customer_code
+      FROM customers
+    given:
+      customers:
+        - {customer_id: 1, name: 'Alice'}
+        - {customer_id: 2, name: 'Bob'}
+    expect:
+      # Only checking specific columns -- other columns are ignored
+      rows:
+        - {customer_id: 1, name_upper: 'ALICE'}
+        - {customer_id: 2, name_upper: 'BOB'}
+
+  - name: test_filter_and_dedup
+    sql: |
+      SELECT DISTINCT region, status
+      FROM orders
+      WHERE amount > 0
+    given:
+      orders:
+        - {region: 'US', status: 'active', amount: 100}
+        - {region: 'US', status: 'active', amount: 200}
+        - {region: 'EU', status: 'active', amount: 50}
+        - {region: 'US', status: 'closed', amount: 0}
+    expect:
+      rows:
+        - {region: 'EU', status: 'active'}
+        - {region: 'US', status: 'active'}
