@@ -1,0 +1,47 @@
+# Demonstrates loading test data from external files instead of inlining in YAML.
+# Supported formats: CSV, JSON, JSONL/NDJSON, Parquet (pyarrow), Avro (fastavro).
+# Paths are resolved relative to this YAML file's directory.
+
+tests:
+  # CSV input, JSON expected output
+  - name: test_csv_input_json_expect
+    sql: |
+      SELECT region, SUM(amount) AS total
+      FROM orders
+      GROUP BY region
+    given:
+      orders:
+        rows_file: data/orders.csv
+    expect:
+      rows_file: data/expected_revenue.json
+
+  # CSV input with explicit schema for type coercion
+  - name: test_csv_with_schema
+    sql: |
+      SELECT region, SUM(amount) AS total
+      FROM orders
+      GROUP BY region
+    given:
+      orders:
+        schema:
+          - {name: region, type: STRING}
+          - {name: amount, type: INT}
+        rows_file: data/orders.csv
+    expect:
+      rows:
+        - {region: 'EU', total: 150}
+        - {region: 'US', total: 300}
+
+  # JSONL (newline-delimited JSON) input
+  - name: test_jsonl_input
+    sql: |
+      SELECT id, UPPER(name) AS name_upper
+      FROM users
+      WHERE active = true
+    given:
+      users:
+        rows_file: data/users.jsonl
+    expect:
+      rows:
+        - {id: 1, name_upper: 'ALICE'}
+        - {id: 2, name_upper: 'BOB'}

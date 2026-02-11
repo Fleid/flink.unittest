@@ -84,9 +84,27 @@ TestCase
 1. **Shorthand** -- `given.tablename: [{col: val}, ...]` -- types are inferred from Python values via `_infer_type`.
 2. **Explicit** -- `given.tablename: {schema: [...], watermark: "...", rows: [...]}` -- the schema block provides Flink SQL type strings and an optional watermark expression.
 
-**SQL source resolution**: `_parse_test()` accepts `sql` (inline) or `sql_file` (relative path to a `.sql` file). They are mutually exclusive. `sql_file` paths are resolved relative to the YAML file's parent directory (the `base_dir` parameter passed from `load_test_file()`). The file is read at parse time, so downstream code always sees a plain SQL string regardless of source. This pattern is designed to be reused for future `rows_file` support on `given` tables and `expect` blocks.
+**SQL source resolution**: `_parse_test()` accepts `sql` (inline) or `sql_file` (relative path to a `.sql` file). They are mutually exclusive. `sql_file` paths are resolved relative to the YAML file's parent directory (the `base_dir` parameter passed from `load_test_file()`). The file is read at parse time, so downstream code always sees a plain SQL string regardless of source.
+
+**Data source resolution**: Both `given` tables and `expect` blocks support `rows_file` as an alternative to inline `rows`. Same mutual exclusivity pattern. `_parse_table_input()` and the expect parsing in `_parse_test()` call `file_readers.read_rows_file()` at parse time, passing the schema (if available) for CSV type coercion. The resolved `list[dict]` is stored in `TableInput.rows` or `ExpectedOutput.rows`, keeping downstream code unaware of the data source.
 
 Type inference rules (`_infer_type`): `bool` -> BOOLEAN, `int` -> INT, `float` -> DOUBLE, `Decimal` -> DECIMAL(10,2), `datetime` -> TIMESTAMP(3), `date` -> DATE, everything else -> STRING.
+
+### `file_readers.py` -- External data file readers
+
+Reads external data files and returns `list[dict]`. Format is inferred from file extension. Single entry point: `read_rows_file(path, schema=None)`.
+
+**CSV** (`.csv`): Uses `csv.DictReader` (stdlib). Two type coercion modes:
+- **Auto-coercion** (no schema): tries int → float → bool → None (empty) → string. Matches YAML's implicit typing.
+- **Schema-driven** (schema provided): maps Flink SQL types to Python converters (INT→`int()`, DOUBLE→`float()`, BOOLEAN→bool, etc.).
+
+**JSON** (`.json`): `json.load()` -- expects an array of objects. Types preserved natively.
+
+**JSONL/NDJSON** (`.jsonl`, `.ndjson`): Line-by-line `json.loads()`. Types preserved natively.
+
+**Parquet** (`.parquet`): Requires `pyarrow` (optional). Uses `pq.read_table().to_pylist()`.
+
+**Avro** (`.avro`): Requires `fastavro` (optional). Uses `fastavro.reader()`.
 
 ### `comparator.py` -- Result comparison
 
@@ -241,7 +259,7 @@ Common extension points:
 |---|---|
 | New YAML field on tests (e.g., `timeout`) | `TestCase` dataclass + `_parse_test()` in `models.py` |
 | New comparison mode (e.g., approximate matching) | `compare_results()` in `comparator.py` |
-| New table input option (e.g., CSV file reference) | `TableInput` dataclass + `_parse_table_input()` in `models.py`, then handle in each backend |
+| New data file format (e.g., ORC) | Add reader function + extension mapping in `file_readers.py` |
 | New table DDL constraint (e.g., unique key) | `TableInput` dataclass + `_parse_table_input()` in `models.py`, `_create_table()` in `flink_backend.py` (see `primary_key` as an example) |
 | New CLI flag | `argparse` block in `flink_sql_test.py:main()` |
 | New auto-detection rule | `detect_backend()` in `flink_sql_test.py` and `_needs_streaming()` in `flink_backend.py` |

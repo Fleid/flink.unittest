@@ -145,6 +145,45 @@ tests:
 
 `sql` and `sql_file` are mutually exclusive -- specify one or the other.
 
+### External data files
+
+Input data (`given`) and expected output (`expect`) can also be loaded from external files using `rows_file`. The format is inferred from the file extension.
+
+```yaml
+tests:
+  - name: test_from_files
+    sql: |
+      SELECT region, SUM(amount) AS total FROM orders GROUP BY region
+    given:
+      orders:
+        rows_file: data/orders.csv
+    expect:
+      rows_file: data/expected.json
+```
+
+Supported formats:
+
+| Extension | Format | Dependency |
+|-----------|--------|------------|
+| `.csv` | CSV with header row | None (stdlib) |
+| `.json` | JSON array of objects | None (stdlib) |
+| `.jsonl`, `.ndjson` | Newline-delimited JSON | None (stdlib) |
+| `.parquet` | Apache Parquet | `pip install pyarrow` |
+| `.avro` | Apache Avro | `pip install fastavro` |
+
+`rows` and `rows_file` are mutually exclusive. Paths are resolved relative to the YAML file's directory.
+
+**CSV type coercion**: CSV values are strings. By default, values are auto-coerced (try int, float, bool, then string). When an explicit `schema` is provided alongside `rows_file`, the schema types guide coercion:
+
+```yaml
+given:
+  orders:
+    schema:
+      - {name: id, type: INT}
+      - {name: amount, type: DOUBLE}
+    rows_file: data/orders.csv
+```
+
 ### Partial column matching
 
 You don't need to assert every output column. Only the columns listed in `expect.rows` are compared -- extra columns in the actual output are ignored.
@@ -337,6 +376,7 @@ flink-sql-test/
 ├── models.py               # YAML parsing + data models
 ├── comparator.py           # Result comparison + diff output
 ├── linter.py               # SQL lint rules (AST + context-based)
+├── file_readers.py         # External data file readers (CSV, JSON, Parquet, Avro)
 ├── backends/
 │   ├── base.py             # Abstract backend interface
 │   ├── duckdb_backend.py   # DuckDB (instant, pure SQL)
@@ -348,7 +388,12 @@ flink-sql-test/
     ├── test_top_patterns.yaml      # Common SQL patterns
     ├── test_streaming_patterns.yaml # Streaming-specific patterns
     ├── test_sql_file.yaml          # External SQL file reference
+    ├── test_data_files.yaml        # External data file reference (CSV, JSON, JSONL)
     ├── test_lint_failures.yaml     # Lint rule examples
-    └── sql/                        # External SQL files
-        └── revenue_by_region.sql
+    ├── sql/                        # External SQL files
+    │   └── revenue_by_region.sql
+    └── data/                       # External data fixtures
+        ├── orders.csv
+        ├── expected_revenue.json
+        └── users.jsonl
 ```

@@ -1,0 +1,3 @@
+{"id": 1, "name": "alice", "active": true}
+{"id": 2, "name": "bob", "active": true}
+{"id": 3, "name": "carol", "active": false}

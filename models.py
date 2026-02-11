@@ -71,10 +71,8 @@ def _infer_type(value) -> str:
     return "STRING"
 
 
-def _parse_table_input(name: str, table_def: dict) -> TableInput:
+def _parse_table_input(name: str, table_def: dict, base_dir: Path) -> TableInput:
     """Parse a single table input definition from YAML."""
-    rows = table_def.get("rows", [])
-
     schema = None
     watermark = table_def.get("watermark")
     primary_key = table_def.get("primary_key")
@@ -88,6 +86,21 @@ def _parse_table_input(name: str, table_def: dict) -> TableInput:
                 elif "name" in item and "type" in item:
                     columns.append(ColumnSchema(name=item["name"], type=item["type"]))
         schema = columns if columns else None
+
+    # Rows: inline or from file (mutually exclusive)
+    has_rows = "rows" in table_def
+    has_rows_file = "rows_file" in table_def
+    if has_rows and has_rows_file:
+        raise ValueError(f"Table '{name}': specify 'rows' or 'rows_file', not both")
+
+    if has_rows_file:
+        rows_path = (base_dir / table_def["rows_file"]).resolve()
+        if not rows_path.is_file():
+            raise FileNotFoundError(f"Table '{name}': rows_file not found: {rows_path}")
+        from file_readers import read_rows_file
+        rows = read_rows_file(rows_path, schema=schema)
+    else:
+        rows = table_def.get("rows", [])
 
     return TableInput(name=name, rows=rows, schema=schema, watermark=watermark, primary_key=primary_key)
 
@@ -121,12 +134,26 @@ def _parse_test(test_def: dict, base_dir: Path) -> TestCase:
             # Shorthand: given.orders: [{...}, {...}]
             given.append(TableInput(name=table_name, rows=table_def))
         elif isinstance(table_def, dict):
-            given.append(_parse_table_input(table_name, table_def))
+            given.append(_parse_table_input(table_name, table_def, base_dir))
 
     # Parse expected output
     expect_def = test_def.get("expect", {})
+    has_expect_rows = "rows" in expect_def
+    has_expect_rows_file = "rows_file" in expect_def
+    if has_expect_rows and has_expect_rows_file:
+        raise ValueError(f"Test '{name}': expect: specify 'rows' or 'rows_file', not both")
+
+    if has_expect_rows_file:
+        rows_path = (base_dir / expect_def["rows_file"]).resolve()
+        if not rows_path.is_file():
+            raise FileNotFoundError(f"Test '{name}': expect rows_file not found: {rows_path}")
+        from file_readers import read_rows_file
+        expect_rows = read_rows_file(rows_path)
+    else:
+        expect_rows = expect_def.get("rows", [])
+
     expect = ExpectedOutput(
-        rows=expect_def.get("rows", []),
+        rows=expect_rows,
         ordered=expect_def.get("ordered", False),
         strict=expect_def.get("strict", False),
     )
