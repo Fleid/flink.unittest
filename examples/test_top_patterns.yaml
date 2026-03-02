@@ -6,7 +6,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 1: Scan + Filter/Transform (STREAM_SOURCE_SCAN → STREAM_CALC)
-  # 1.76M queries -- by far the most common pattern.
   # Simple SELECT with WHERE clause, column transforms, CASE expressions.
   # ──────────────────────────────────────────────────────────────────
 
@@ -41,7 +40,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 2: Lateral Join / CROSS JOIN UNNEST (STREAM_CORRELATE)
-  # 120K queries -- flattening arrays/maps, UDTFs.
   # ──────────────────────────────────────────────────────────────────
 
   - name: lateral_join_unnest
@@ -71,7 +69,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 3: Scan + LIMIT (STREAM_LIMIT)
-  # 57K queries -- preview / sampling / debugging.
   # ──────────────────────────────────────────────────────────────────
 
   - name: scan_with_limit
@@ -98,7 +95,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 4: GROUP BY Aggregate (STREAM_GROUP_AGGREGATE)
-  # 40K queries -- counts, sums, avgs grouped by dimension.
   # ──────────────────────────────────────────────────────────────────
 
   - name: group_by_aggregate_sum_count
@@ -146,7 +142,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 5: Regular JOIN (STREAM_JOIN)
-  # 19K queries -- enriching a stream with reference data.
   # ──────────────────────────────────────────────────────────────────
 
   - name: inner_join_enrichment
@@ -203,7 +198,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 6: Multi-JOIN (STREAM_MULTI_JOIN)
-  # 8K queries -- joining 3+ tables.
   # ──────────────────────────────────────────────────────────────────
 
   - name: multi_join_three_tables
@@ -236,7 +230,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 7: JOIN + GROUP BY (STREAM_JOIN + STREAM_GROUP_AGGREGATE)
-  # 3K+ queries -- join then aggregate.
   # ──────────────────────────────────────────────────────────────────
 
   - name: join_then_group_by
@@ -269,7 +262,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 8: UNION ALL (STREAM_UNION)
-  # 3K+ queries -- merging multiple streams.
   # ──────────────────────────────────────────────────────────────────
 
   - name: union_all_merge_streams
@@ -320,7 +312,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern 10: ORDER BY + LIMIT (STREAM_SORT_LIMIT)
-  # 1.5K queries -- top-N with ordering.
   # ──────────────────────────────────────────────────────────────────
 
   - name: order_by_limit_top_n

@@ -6,7 +6,6 @@ tests:
   # ──────────────────────────────────────────────────────────────────
   # Pattern: Window Aggregate (STREAM_WINDOW_TABLE_FUNCTION +
   #          STREAM_LOCAL_WINDOW_AGGREGATE + STREAM_GLOBAL_WINDOW_AGGREGATE)
-  # ~10K queries -- TUMBLE / HOP windows for time-based aggregation.
   # ──────────────────────────────────────────────────────────────────
 
   - name: tumble_window_aggregate
@@ -81,7 +80,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern: OVER Aggregate (STREAM_OVER_AGGREGATE)
-  # 42K queries -- running totals, moving averages, row numbering.
   # Note: OVER windows can run on DuckDB too for batch semantics.
   # ──────────────────────────────────────────────────────────────────
 
@@ -117,7 +115,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern: Top-N / RANK (STREAM_RANK)
-  # ~4K queries -- finding top rows per partition.
   # ──────────────────────────────────────────────────────────────────
 
   - name: top_n_per_partition
@@ -149,7 +146,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern: Temporal Join (STREAM_TEMPORAL_JOIN)
-  # ~5K queries -- joining a stream against a versioned table.
   # Requires Flink backend.
   # ──────────────────────────────────────────────────────────────────
 
@@ -193,7 +189,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern: Changelog Normalize (STREAM_CHANGELOG_NORMALIZE)
-  # ~117K queries -- reading from compacted/upsert Kafka topics.
   # This pattern is implicit (Flink adds it for upsert sources),
   # so we test the SQL pattern that produces it: reading from a
   # table with primary key and doing lookups/joins.
@@ -219,7 +214,6 @@ tests:
 
   # ──────────────────────────────────────────────────────────────────
   # Pattern: GROUP BY with UNION ALL source
-  # ~2.2K queries -- aggregate across merged streams.
   # ──────────────────────────────────────────────────────────────────
 
   - name: union_then_aggregate
