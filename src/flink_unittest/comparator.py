@@ -24,6 +24,11 @@ def _normalize_value(value):
         return value
     if isinstance(value, str):
         return value.strip()
+    # Recursively normalize nested types (ARRAY, ROW/MAP from Arrow)
+    if isinstance(value, list):
+        return [_normalize_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _normalize_value(v) for k, v in value.items()}
     return value
 
 

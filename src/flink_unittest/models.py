@@ -12,6 +12,11 @@ class ColumnSchema:
     name: str
     type: str
 
+    def to_arrow_type(self):
+        from flink_unittest.arrow_types import flink_type_to_arrow
+
+        return flink_type_to_arrow(self.type)
+
 
 @dataclass
 class TableInput:
