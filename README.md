@@ -4,6 +4,18 @@ Unit test your Flink SQL with YAML-defined fixtures. Inspired by [dbt unit tests
 
 The tool ships with two backends. **DuckDB** is included by default and provides fast, in-process execution for the most common SQL patterns (filters, joins, aggregations, window functions). **PyFlink** offers full Flink SQL compatibility including streaming operations (TUMBLE/HOP windows, temporal joins, MATCH_RECOGNIZE), but requires a separate install step in a Python 3.11 virtualenv due to `apache-flink`'s dependency constraints.
 
+### Type handling and SQL dialect caveats
+
+> **Warning:** The DuckDB backend is not a full Flink SQL emulator. Be aware of these differences when writing tests:
+
+**SQL syntax** -- DuckDB uses standard SQL, which differs from Flink SQL in some cases. For example, Flink SQL requires `<>` for "not equal" while DuckDB also accepts `!=`. A test that passes on DuckDB may fail on Flink (or on Confluent Cloud) due to parser differences.
+
+**Type coercion** -- Flink SQL types are mapped to DuckDB types at table creation time (`STRING`→`VARCHAR`, `TIMESTAMP(3)`→`TIMESTAMP`, `TIMESTAMP_LTZ(3)`→`TIMESTAMP WITH TIME ZONE`, etc.). The comparator normalizes results before asserting (`Decimal`→`float`, `datetime`→`str`, floats rounded to 6 decimal places) to absorb differences in what each backend returns. Despite this, edge cases with precision, timezone handling, or `NULL` semantics may produce different results across backends.
+
+**Complex types** -- `ARRAY<ROW<...>>`, `MAP`, and nested `ROW` types work with the PyFlink backend but are not supported by DuckDB. Use `backend: flink` or an explicit schema with these types.
+
+**Recommendation** -- Use DuckDB for fast iteration on standard SQL logic (filters, joins, aggregations). When you need to validate full Flink SQL compatibility -- especially for production queries running on Confluent Cloud -- run with `--backend flink` to catch dialect-specific issues.
+
 ## Installation
 
 ```bash
@@ -295,6 +307,7 @@ The default (`--backend auto`) selects the backend per test:
 | Everything else | duckdb |
 
 Tests that require PyFlink are gracefully skipped if it's not installed.
+
 
 ## CLI usage
 
