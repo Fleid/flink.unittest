@@ -36,10 +36,7 @@ def _normalize_row(row: dict, columns: list[str] | None = None) -> dict:
 
 def _row_sort_key(row: dict) -> tuple:
     """Create a sort key from a row dict for order-independent comparison."""
-    return tuple(
-        (k, str(v) if v is not None else "")
-        for k, v in sorted(row.items())
-    )
+    return tuple((k, str(v) if v is not None else "") for k, v in sorted(row.items()))
 
 
 def compare_results(
@@ -95,7 +92,10 @@ def compare_results(
     # Compare row counts first
     if len(actual_normalized) != len(expected_normalized):
         msg = _format_diff(actual_normalized, expected_normalized, compare_columns)
-        return False, f"Row count mismatch: expected {len(expected_normalized)}, got {len(actual_normalized)}\n{msg}"
+        return (
+            False,
+            f"Row count mismatch: expected {len(expected_normalized)}, got {len(actual_normalized)}\n{msg}",
+        )
 
     # Compare row by row
     mismatches = []

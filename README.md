@@ -2,30 +2,19 @@
 
 Unit test your Flink SQL with YAML-defined fixtures. Inspired by [dbt unit tests](https://docs.getdbt.com/docs/build/unit-tests) and [ksql-test-runner](https://docs.ksqldb.io/en/latest/how-to-guides/test-an-app/).
 
+The tool ships with two backends. **DuckDB** is included by default and provides fast, in-process execution for the most common SQL patterns (filters, joins, aggregations, window functions). **PyFlink** offers full Flink SQL compatibility including streaming operations (TUMBLE/HOP windows, temporal joins, MATCH_RECOGNIZE), but requires a separate install step in a Python 3.11 virtualenv due to `apache-flink`'s dependency constraints.
+
 ## Installation
 
 ```bash
 pip install flink-unittest
 ```
 
-Optional dependency groups:
+With that command you only have access to the DuckDB backend (packaged by default). To install the Flink one, follow the steps below.
 
-```bash
-pip install "flink-unittest[lint]"      # SQL lint checks (sqlglot)
-pip install "flink-unittest[parquet]"   # Parquet fixture files (pyarrow)
-pip install "flink-unittest[avro]"      # Avro fixture files (fastavro)
-pip install "flink-unittest[flink]"     # PyFlink backend (apache-flink)
-pip install "flink-unittest[all]"       # All optional deps (except flink)
-```
+> **Note:** Because `apache-flink` requires Python 3.11 and `setuptools<78` due to a `pkg_resources` dependency in `apache-beam`, it is not included in the default install.
 
-## Quick start
-
-```bash
-pip install flink-unittest
-flink-unittest examples/
-```
-
-To also run streaming tests (TUMBLE/HOP windows, temporal joins), install PyFlink in a Python 3.11 virtualenv:
+To also run streaming tests (TUMBLE/HOP windows, temporal joins), and ensure full SQL compatibility, install PyFlink in a Python 3.11 virtualenv:
 
 ```bash
 python3.11 -m venv .venv311
@@ -35,7 +24,22 @@ pip install --no-build-isolation apache-flink
 flink-unittest examples/
 ```
 
-> **Note:** `apache-flink` requires Python 3.11 and `setuptools<78` due to a `pkg_resources` dependency in `apache-beam`. The `--no-build-isolation` flag is needed so the build uses the pinned setuptools.
+Other optional dependency groups:
+
+```bash
+pip install "flink-unittest[lint]"      # SQL lint checks (sqlglot)
+pip install "flink-unittest[parquet]"   # Parquet fixture files (pyarrow)
+pip install "flink-unittest[avro]"      # Avro fixture files (fastavro)
+pip install "flink-unittest[all]"       # All of the above
+```
+
+## Quick start
+
+```bash
+pip install flink-unittest
+flink-unittest examples/
+```
+
 
 ## Writing tests
 

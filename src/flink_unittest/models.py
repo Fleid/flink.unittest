@@ -1,6 +1,6 @@
 """Data models and YAML parsing for Flink SQL test definitions."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime, date
 from decimal import Decimal
@@ -16,10 +16,13 @@ class ColumnSchema:
 @dataclass
 class TableInput:
     """A mock input table with optional explicit schema and watermark."""
+
     name: str
     rows: list[dict]
     schema: list[ColumnSchema] | None = None
-    watermark: str | None = None  # e.g. "event_time AS event_time - INTERVAL '1' SECOND"
+    watermark: str | None = (
+        None  # e.g. "event_time AS event_time - INTERVAL '1' SECOND"
+    )
     primary_key: list[str] | None = None  # e.g. ["currency"] for temporal join tables
 
     def infer_schema(self) -> list[ColumnSchema]:
@@ -39,14 +42,18 @@ class TableInput:
 @dataclass
 class ExpectedOutput:
     """Expected output rows, with optional ordering."""
+
     rows: list[dict]
     ordered: bool = False  # If True, row order matters
-    strict: bool = False   # If True, actual must have exactly these columns in this order
+    strict: bool = (
+        False  # If True, actual must have exactly these columns in this order
+    )
 
 
 @dataclass
 class TestCase:
     """A single test case: SQL + mock inputs + expected output."""
+
     name: str
     sql: str
     given: list[TableInput]
@@ -98,11 +105,18 @@ def _parse_table_input(name: str, table_def: dict, base_dir: Path) -> TableInput
         if not rows_path.is_file():
             raise FileNotFoundError(f"Table '{name}': rows_file not found: {rows_path}")
         from flink_unittest.file_readers import read_rows_file
+
         rows = read_rows_file(rows_path, schema=schema)
     else:
         rows = table_def.get("rows", [])
 
-    return TableInput(name=name, rows=rows, schema=schema, watermark=watermark, primary_key=primary_key)
+    return TableInput(
+        name=name,
+        rows=rows,
+        schema=schema,
+        watermark=watermark,
+        primary_key=primary_key,
+    )
 
 
 def _parse_test(test_def: dict, base_dir: Path) -> TestCase:
@@ -141,13 +155,18 @@ def _parse_test(test_def: dict, base_dir: Path) -> TestCase:
     has_expect_rows = "rows" in expect_def
     has_expect_rows_file = "rows_file" in expect_def
     if has_expect_rows and has_expect_rows_file:
-        raise ValueError(f"Test '{name}': expect: specify 'rows' or 'rows_file', not both")
+        raise ValueError(
+            f"Test '{name}': expect: specify 'rows' or 'rows_file', not both"
+        )
 
     if has_expect_rows_file:
         rows_path = (base_dir / expect_def["rows_file"]).resolve()
         if not rows_path.is_file():
-            raise FileNotFoundError(f"Test '{name}': expect rows_file not found: {rows_path}")
+            raise FileNotFoundError(
+                f"Test '{name}': expect rows_file not found: {rows_path}"
+            )
         from flink_unittest.file_readers import read_rows_file
+
         expect_rows = read_rows_file(rows_path)
     else:
         expect_rows = expect_def.get("rows", [])

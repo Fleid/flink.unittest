@@ -11,6 +11,7 @@ from flink_unittest.models import TestCase, TableInput
 try:
     from pyflink.table import EnvironmentSettings, TableEnvironment
     from pyflink.common import RowKind
+
     PYFLINK_AVAILABLE = True
 except ImportError:
     PYFLINK_AVAILABLE = False
@@ -108,9 +109,7 @@ class FlinkBackend(Backend):
             settings = EnvironmentSettings.in_streaming_mode()
             self._streaming_env = TableEnvironment.create(settings)
             # Set parallelism to 1 for deterministic results
-            self._streaming_env.get_config().set(
-                "parallelism.default", "1"
-            )
+            self._streaming_env.get_config().set("parallelism.default", "1")
         return self._streaming_env
 
     def execute_test(self, test: TestCase) -> list[dict]:
@@ -143,7 +142,12 @@ class FlinkBackend(Backend):
             for row in results:
                 kind = row.get_row_kind()
                 row_dict = {col_names[i]: row[i] for i in range(len(col_names))}
-                key = tuple(sorted((k, str(v) if v is not None else "") for k, v in row_dict.items()))
+                key = tuple(
+                    sorted(
+                        (k, str(v) if v is not None else "")
+                        for k, v in row_dict.items()
+                    )
+                )
                 if kind in (RowKind.INSERT, RowKind.UPDATE_AFTER):
                     state[key] = row_dict
                 elif kind in (RowKind.UPDATE_BEFORE, RowKind.DELETE):
@@ -175,5 +179,6 @@ class FlinkBackend(Backend):
     def cleanup(self):
         # Clean up temp files
         import shutil
+
         if self._tmp_dir.exists():
             shutil.rmtree(self._tmp_dir, ignore_errors=True)

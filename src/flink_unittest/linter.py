@@ -97,11 +97,13 @@ def check_select_star(test: TestCase) -> list[LintResult]:
             continue
         if isinstance(parent, exp.Column) and isinstance(parent.parent, exp.AggFunc):
             continue
-        return [LintResult(
-            level=LintLevel.WARN,
-            rule_name="select-star",
-            message="SELECT * is fragile -- consider listing columns explicitly",
-        )]
+        return [
+            LintResult(
+                level=LintLevel.WARN,
+                rule_name="select-star",
+                message="SELECT * is fragile -- consider listing columns explicitly",
+            )
+        ]
     return []
 
 
@@ -123,11 +125,13 @@ def check_unqualified_column_in_join(test: TestCase) -> list[LintResult]:
     if unqualified:
         col_list = ", ".join(sorted(unqualified)[:5])
         suffix = f" (and {len(unqualified) - 5} more)" if len(unqualified) > 5 else ""
-        return [LintResult(
-            level=LintLevel.WARN,
-            rule_name="unqualified-column-in-join",
-            message=f"Unqualified column(s) in JOIN query: {col_list}{suffix} -- qualify with table alias to avoid ambiguity",
-        )]
+        return [
+            LintResult(
+                level=LintLevel.WARN,
+                rule_name="unqualified-column-in-join",
+                message=f"Unqualified column(s) in JOIN query: {col_list}{suffix} -- qualify with table alias to avoid ambiguity",
+            )
+        ]
     return []
 
 
@@ -165,11 +169,13 @@ def check_group_by_mismatch(test: TestCase) -> list[LintResult]:
             col_sql = expr.sql().lower()
             col_name = expr.name.lower()
             if col_sql not in group_by_keys and col_name not in group_by_keys:
-                results.append(LintResult(
-                    level=LintLevel.ERROR,
-                    rule_name="group-by-mismatch",
-                    message=f"Column '{expr.sql()}' in SELECT is not in GROUP BY and not aggregated",
-                ))
+                results.append(
+                    LintResult(
+                        level=LintLevel.ERROR,
+                        rule_name="group-by-mismatch",
+                        message=f"Column '{expr.sql()}' in SELECT is not in GROUP BY and not aggregated",
+                    )
+                )
     return results
 
 
@@ -186,11 +192,13 @@ def check_missing_watermark(test: TestCase) -> list[LintResult]:
     tables_without_watermark = [t.name for t in test.given if not t.watermark]
     if tables_without_watermark:
         table_list = ", ".join(tables_without_watermark)
-        return [LintResult(
-            level=LintLevel.WARN,
-            rule_name="missing-watermark",
-            message=f"Windowed query but table(s) have no watermark: {table_list}",
-        )]
+        return [
+            LintResult(
+                level=LintLevel.WARN,
+                rule_name="missing-watermark",
+                message=f"Windowed query but table(s) have no watermark: {table_list}",
+            )
+        ]
     return []
 
 
@@ -203,11 +211,13 @@ def check_temporal_join_missing_pk(test: TestCase) -> list[LintResult]:
     if has_any_pk:
         return []
 
-    return [LintResult(
-        level=LintLevel.WARN,
-        rule_name="temporal-join-missing-pk",
-        message="Temporal join (FOR SYSTEM_TIME AS OF) but no table declares a primary_key",
-    )]
+    return [
+        LintResult(
+            level=LintLevel.WARN,
+            rule_name="temporal-join-missing-pk",
+            message="Temporal join (FOR SYSTEM_TIME AS OF) but no table declares a primary_key",
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------

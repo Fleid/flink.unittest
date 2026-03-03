@@ -41,9 +41,11 @@ def get_backend(name: str):
     """Lazy-load and return a backend instance."""
     if name == "duckdb":
         from flink_unittest.backends.duckdb_backend import DuckDBBackend
+
         return DuckDBBackend()
     elif name == "flink":
         from flink_unittest.backends.flink_backend import FlinkBackend
+
         return FlinkBackend()
     else:
         raise ValueError(f"Unknown backend: {name}")
@@ -58,13 +60,16 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 
-def run_test(test: TestCase, backend, strict_override: bool = False) -> tuple[bool, str, float]:
+def run_test(
+    test: TestCase, backend, strict_override: bool = False
+) -> tuple[bool, str, float]:
     """Run a single test case. Returns (passed, message, duration_seconds)."""
     start = time.time()
     try:
         actual = backend.execute_test(test)
         passed, message = compare_results(
-            actual, test.expect.rows,
+            actual,
+            test.expect.rows,
             ordered=test.expect.ordered,
             strict=test.expect.strict or strict_override,
         )
@@ -109,9 +114,12 @@ def main():
     lint_enabled = args.lint
     if lint_enabled:
         from flink_unittest.linter import lint_available, lint_test, LintLevel
+
         if not lint_available():
-            print(f"{YELLOW}Lint: sqlglot not installed -- only context-based checks will run. "
-                  f"Install with: pip install sqlglot{RESET}")
+            print(
+                f"{YELLOW}Lint: sqlglot not installed -- only context-based checks will run. "
+                f"Install with: pip install sqlglot{RESET}"
+            )
 
     # Load all tests
     all_tests = []
@@ -177,10 +185,14 @@ def main():
         ms = duration * 1000
 
         if passed:
-            print(f"  {GREEN}PASS{RESET} {test.name} {DIM}[{backend_name}, {ms:.0f}ms]{RESET}")
+            print(
+                f"  {GREEN}PASS{RESET} {test.name} {DIM}[{backend_name}, {ms:.0f}ms]{RESET}"
+            )
             passed_count += 1
         else:
-            print(f"  {RED}FAIL{RESET} {test.name} {DIM}[{backend_name}, {ms:.0f}ms]{RESET}")
+            print(
+                f"  {RED}FAIL{RESET} {test.name} {DIM}[{backend_name}, {ms:.0f}ms]{RESET}"
+            )
             # Indent the failure message
             for line in message.split("\n"):
                 print(f"       {line}")

@@ -61,7 +61,9 @@ def _auto_coerce_row(row: dict) -> dict:
 
 def _coerce_row_with_schema(row: dict, type_map: dict[str, str]) -> dict:
     return {
-        k: _schema_coerce_value(v, type_map[k]) if k in type_map else _auto_coerce_value(v)
+        k: _schema_coerce_value(v, type_map[k])
+        if k in type_map
+        else _auto_coerce_value(v)
         for k, v in row.items()
     }
 
@@ -144,5 +146,7 @@ def read_rows_file(path: Path, schema: list[ColumnSchema] | None = None) -> list
     reader_fn = _READERS.get(ext)
     if reader_fn is None:
         supported = ", ".join(sorted(_READERS.keys()))
-        raise ValueError(f"Unsupported file format '{ext}': {path}\nSupported: {supported}")
+        raise ValueError(
+            f"Unsupported file format '{ext}': {path}\nSupported: {supported}"
+        )
     return reader_fn(path, schema)
