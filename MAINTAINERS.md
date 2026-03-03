@@ -29,9 +29,9 @@
                    │    DuckDB     │   │     PyFlink        │
                    │   Backend     │   │    Backend         │
                    │               │   │                    │
-                   │ In-memory DB  │   │  filesystem/JSON   │
-                   │ CREATE TEMP   │   │  connector for all │
-                   │ TABLE+INSERT  │   │  tables (batch +   │
+                   │ Arrow tables  │   │  filesystem/JSON   │
+                   │ via register  │   │  connector for all │
+                   │ (zero-copy)   │   │  tables (batch +   │
                    │ Execute SQL   │   │  streaming)        │
                    └───────┬───────┘   └────────┬───────────┘
                            │                    │
@@ -116,7 +116,7 @@ Compares `list[dict]` actual vs expected. Four features to know about:
 
 3. **Order independence**: By default, both sides are sorted by `_row_sort_key` (alphabetical key-value tuples). Set `ordered: true` in the YAML to compare in the order given.
 
-4. **Type coercion** (`_normalize_value`): Decimal -> float, datetime/date -> string, float rounded to 6 decimal places, strings stripped. This handles the mismatch between what DuckDB returns (Python native types) and what the YAML defines.
+4. **Type coercion** (`_normalize_value`): Decimal -> float, datetime/date -> string, float rounded to 6 decimal places, strings stripped. Lists and dicts are recursively normalized to handle ARRAY, MAP, and ROW results from Arrow. This handles the mismatch between what DuckDB returns (Python native types via Arrow) and what the YAML defines.
 
 ### `linter.py` -- SQL lint rules
 
@@ -144,19 +144,30 @@ class Backend(ABC):
 
 Every backend must turn `TestCase.given` into tables, run `TestCase.sql`, and return the result as `list[dict]`.
 
+### `arrow_types.py` -- Flink SQL → Arrow type mapping
+
+The canonical type layer between Flink SQL type strings and DuckDB. Three responsibilities:
+
+1. **`flink_type_to_arrow(flink_type: str) -> pa.DataType`**: Parses Flink SQL type strings into Arrow types. Handles simple types (`STRING`→`pa.string()`, `INT`→`pa.int32()`, etc.), parameterized types (`DECIMAL(p,s)`→`pa.decimal128(p,s)`, `TIMESTAMP(p)`→`pa.timestamp('us')`), and nested types (`ARRAY<T>`→`pa.list_()`, `MAP<K,V>`→`pa.map_()`, `ROW<f1 T1, f2 T2>`→`pa.struct()`). Nested types are parsed recursively using a small tokenizer that handles angle brackets and commas at the correct depth.
+
+2. **`coerce_value(value, arrow_type)`**: Converts Python values from YAML/CSV parsing to match Arrow types. Key conversions: timestamp strings → `datetime` (via `fromisoformat()`), int/float → `Decimal` for decimal columns, recursive coercion for nested ARRAY/MAP/ROW structures. `None` passes through as Arrow null.
+
+3. **`table_input_to_arrow(table: TableInput) -> pa.Table`**: Builds an Arrow table from a `TableInput`. Uses `table.infer_schema()` for column types, maps each to Arrow via `flink_type_to_arrow()`, coerces row values, and builds via `pa.table(columns, schema=arrow_schema)`.
+
 ### `backends/duckdb_backend.py` -- DuckDB backend
 
 Single in-memory `duckdb.connect(":memory:")` connection reused across all tests.
 
 For each test:
-1. `CREATE OR REPLACE TEMP TABLE` with inferred/explicit column types (mapped via `FLINK_TO_DUCKDB_TYPES`)
-2. `INSERT INTO ... VALUES` with Python values converted to SQL literals
+1. Convert each `TableInput` to an Arrow table via `table_input_to_arrow()`
+2. Register the Arrow table as a DuckDB view via `conn.register(name, arrow_table)` -- zero-copy, no DDL generation
 3. Execute the SQL under test
-4. Return rows as `list[dict]`
+4. Extract results via `fetch_arrow_table().to_pylist()` → `list[dict]` with proper Python types
+5. Unregister tables via `conn.unregister(name)` to avoid name collisions across tests
 
-The type mapping (`_map_type`) handles common Flink -> DuckDB differences: `STRING` -> `VARCHAR`, `TIMESTAMP(3)` -> `TIMESTAMP`, `TIMESTAMP_LTZ(3)` -> `TIMESTAMP WITH TIME ZONE`. Unknown types pass through -- DuckDB is permissive enough to handle most things.
+This approach replaces the previous DDL/INSERT strategy (`CREATE OR REPLACE TEMP TABLE` + `INSERT INTO ... VALUES` with SQL literal escaping). The Arrow path eliminates the `FLINK_TO_DUCKDB_TYPES` mapping dict, `_map_type()`, `_sql_literal()`, and `_create_table_sql()` -- all type translation is handled by the Arrow layer.
 
-**Important**: `CREATE OR REPLACE TEMP` means tables from a previous test can be overwritten. The connection is deliberately shared so DuckDB stays fast (no reconnect overhead). This does mean tests are not isolated from each other -- a test could in theory SELECT from a table created by a prior test. This is a known trade-off.
+**Important**: `conn.register()` creates a view scoped to the connection lifetime. `conn.unregister()` is called after each test to clean up. The connection is deliberately shared so DuckDB stays fast (no reconnect overhead).
 
 ### `backends/flink_backend.py` -- PyFlink backend
 
@@ -190,9 +201,9 @@ DuckDB and Flink SQL are not the same dialect. The current approach is "run it a
 
 A future improvement could add a lightweight SQL rewriter or integrate [SQLGlot](https://github.com/tobymao/sqlglot) for dialect transpilation (this is what SQLMesh does).
 
-### 2. No test isolation in DuckDB
+### 2. Test isolation in DuckDB
 
-The single `duckdb.connect(":memory:")` connection is shared across all tests within a run. `CREATE OR REPLACE TEMP TABLE` prevents collisions on table names, but if two tests define different schemas for the same table name in different files, the execution order matters. If this becomes a problem, the simplest fix is to use `conn.execute("DROP TABLE IF EXISTS ...")` before each test or create a fresh connection per test (at the cost of ~1ms per test).
+The single `duckdb.connect(":memory:")` connection is shared across all tests within a run. Tables are registered as Arrow views via `conn.register()` before each test and unregistered via `conn.unregister()` after, so table names don't collide across tests. If isolation issues arise, creating a fresh connection per test (~1ms cost) is a simple fallback.
 
 ### 3. The streaming detection regex is duplicated
 
