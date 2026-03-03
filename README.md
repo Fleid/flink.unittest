@@ -1,12 +1,28 @@
-# flink-sql-test
+# flink-unittest
 
 Unit test your Flink SQL with YAML-defined fixtures. Inspired by [dbt unit tests](https://docs.getdbt.com/docs/build/unit-tests) and [ksql-test-runner](https://docs.ksqldb.io/en/latest/how-to-guides/test-an-app/).
+
+## Installation
+
+```bash
+pip install flink-unittest
+```
+
+Optional dependency groups:
+
+```bash
+pip install "flink-unittest[lint]"      # SQL lint checks (sqlglot)
+pip install "flink-unittest[parquet]"   # Parquet fixture files (pyarrow)
+pip install "flink-unittest[avro]"      # Avro fixture files (fastavro)
+pip install "flink-unittest[flink]"     # PyFlink backend (apache-flink)
+pip install "flink-unittest[all]"       # All optional deps (except flink)
+```
 
 ## Quick start
 
 ```bash
-pip install pyyaml duckdb
-python flink_sql_test.py examples/
+pip install flink-unittest
+flink-unittest examples/
 ```
 
 To also run streaming tests (TUMBLE/HOP windows, temporal joins), install PyFlink in a Python 3.11 virtualenv:
@@ -14,9 +30,9 @@ To also run streaming tests (TUMBLE/HOP windows, temporal joins), install PyFlin
 ```bash
 python3.11 -m venv .venv311
 source .venv311/bin/activate
-pip install "setuptools<78" pyyaml duckdb
+pip install "setuptools<78" "flink-unittest[all]"
 pip install --no-build-isolation apache-flink
-python flink_sql_test.py examples/
+flink-unittest examples/
 ```
 
 > **Note:** `apache-flink` requires Python 3.11 and `setuptools<78` due to a `pkg_resources` dependency in `apache-beam`. The `--no-build-isolation` flag is needed so the build uses the pinned setuptools.
@@ -48,7 +64,7 @@ tests:
 Save this as `tests/test_revenue.yaml` and run:
 
 ```bash
-python flink_sql_test.py tests/test_revenue.yaml
+flink-unittest tests/test_revenue.yaml
 ```
 
 ```
@@ -248,7 +264,7 @@ tests:
 Used automatically for standard SQL (filters, joins, aggregations, window functions, etc.). Zero startup cost, runs in-process.
 
 ```bash
-python flink_sql_test.py tests/ --backend duckdb
+flink-unittest tests/ --backend duckdb
 ```
 
 ### PyFlink
@@ -257,7 +273,7 @@ Used automatically when the SQL contains streaming constructs: `TUMBLE()`, `HOP(
 
 ```bash
 pip install apache-flink
-python flink_sql_test.py tests/ --backend flink
+flink-unittest tests/ --backend flink
 ```
 
 ### Auto-detection
@@ -277,7 +293,7 @@ Tests that require PyFlink are gracefully skipped if it's not installed.
 ## CLI usage
 
 ```
-python flink_sql_test.py [paths...] [--backend duckdb|flink|auto] [--strict] [--lint]
+flink-unittest [paths...] [--backend duckdb|flink|auto] [--strict] [--lint]
 ```
 
 - Pass files or directories. Directories are scanned for `*.yaml` and `*.yml` files.
@@ -285,19 +301,22 @@ python flink_sql_test.py [paths...] [--backend duckdb|flink|auto] [--strict] [--
 
 ```bash
 # Run one file
-python flink_sql_test.py tests/test_transforms.yaml
+flink-unittest tests/test_transforms.yaml
 
 # Run all tests in a directory
-python flink_sql_test.py tests/
+flink-unittest tests/
 
 # Run multiple paths
-python flink_sql_test.py tests/core/ tests/edge_cases.yaml
+flink-unittest tests/core/ tests/edge_cases.yaml
 
 # Force a backend
-python flink_sql_test.py tests/ --backend duckdb
+flink-unittest tests/ --backend duckdb
 
 # Enforce strict column projection on all tests
-python flink_sql_test.py tests/ --strict
+flink-unittest tests/ --strict
+
+# Run as a Python module
+python -m flink_unittest tests/
 ```
 
 The `--strict` flag applies strict column projection globally -- every test will fail if its actual output has extra columns, missing columns, or columns in the wrong order. This is equivalent to setting `strict: true` on every test's `expect` block. The CLI flag and the per-test YAML setting are OR'd together, so individual tests can still opt in via YAML without the global flag.
@@ -307,8 +326,8 @@ The `--strict` flag applies strict column projection globally -- every test will
 The `--lint` flag runs SQL lint checks on each test before execution. Lint warnings and errors are printed inline above the test result.
 
 ```bash
-pip install sqlglot    # optional, enables AST-based rules
-python flink_sql_test.py tests/ --lint
+pip install "flink-unittest[lint]"
+flink-unittest tests/ --lint
 ```
 
 ```
@@ -371,29 +390,32 @@ These SQL patterns are covered:
 ## Project structure
 
 ```
-flink-sql-test/
-├── flink_sql_test.py       # CLI entry point
-├── models.py               # YAML parsing + data models
-├── comparator.py           # Result comparison + diff output
-├── linter.py               # SQL lint rules (AST + context-based)
-├── file_readers.py         # External data file readers (CSV, JSON, Parquet, Avro)
-├── backends/
-│   ├── base.py             # Abstract backend interface
-│   ├── duckdb_backend.py   # DuckDB (instant, pure SQL)
-│   └── flink_backend.py    # PyFlink (streaming semantics)
-├── requirements.txt
-└── examples/
-    ├── test_basic.yaml             # Introductory tests
-    ├── test_streaming.yaml         # TUMBLE window tests (Flink)
-    ├── test_top_patterns.yaml      # Common SQL patterns
-    ├── test_streaming_patterns.yaml # Streaming-specific patterns
-    ├── test_sql_file.yaml          # External SQL file reference
-    ├── test_data_files.yaml        # External data file reference (CSV, JSON, JSONL)
-    ├── test_lint_failures.yaml     # Lint rule examples
-    ├── sql/                        # External SQL files
-    │   └── revenue_by_region.sql
-    └── data/                       # External data fixtures
-        ├── orders.csv
-        ├── expected_revenue.json
-        └── users.jsonl
+flink-unittest/
+├── pyproject.toml
+├── src/flink_unittest/
+│   ├── __init__.py             # Package version + get_examples_dir()
+│   ├── __main__.py             # python -m flink_unittest support
+│   ├── cli.py                  # CLI entry point
+│   ├── models.py               # YAML parsing + data models
+│   ├── comparator.py           # Result comparison + diff output
+│   ├── linter.py               # SQL lint rules (AST + context-based)
+│   ├── file_readers.py         # External data file readers (CSV, JSON, Parquet, Avro)
+│   ├── backends/
+│   │   ├── base.py             # Abstract backend interface
+│   │   ├── duckdb_backend.py   # DuckDB (instant, pure SQL)
+│   │   └── flink_backend.py    # PyFlink (streaming semantics)
+│   └── examples/
+│       ├── test_basic.yaml             # Introductory tests
+│       ├── test_streaming.yaml         # TUMBLE window tests (Flink)
+│       ├── test_top_patterns.yaml      # Common SQL patterns
+│       ├── test_streaming_patterns.yaml # Streaming-specific patterns
+│       ├── test_sql_file.yaml          # External SQL file reference
+│       ├── test_data_files.yaml        # External data file reference (CSV, JSON, JSONL)
+│       ├── test_lint_failures.yaml     # Lint rule examples
+│       ├── sql/                        # External SQL files
+│       │   └── revenue_by_region.sql
+│       └── data/                       # External data fixtures
+│           ├── orders.csv
+│           ├── expected_revenue.json
+│           └── users.jsonl
 ```

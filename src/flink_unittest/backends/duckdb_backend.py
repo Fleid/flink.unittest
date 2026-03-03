@@ -1,8 +1,8 @@
 """DuckDB backend for fast local SQL testing."""
 
 import duckdb
-from backends.base import Backend
-from models import TestCase, TableInput
+from flink_unittest.backends.base import Backend
+from flink_unittest.models import TestCase, TableInput
 
 
 # Flink SQL type -> DuckDB type mapping

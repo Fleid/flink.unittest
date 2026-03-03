@@ -1,7 +1,7 @@
 """Abstract backend interface for Flink SQL test execution."""
 
 from abc import ABC, abstractmethod
-from models import TestCase
+from flink_unittest.models import TestCase
 
 
 class Backend(ABC):

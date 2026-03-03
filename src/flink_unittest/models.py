@@ -97,7 +97,7 @@ def _parse_table_input(name: str, table_def: dict, base_dir: Path) -> TableInput
         rows_path = (base_dir / table_def["rows_file"]).resolve()
         if not rows_path.is_file():
             raise FileNotFoundError(f"Table '{name}': rows_file not found: {rows_path}")
-        from file_readers import read_rows_file
+        from flink_unittest.file_readers import read_rows_file
         rows = read_rows_file(rows_path, schema=schema)
     else:
         rows = table_def.get("rows", [])
@@ -147,7 +147,7 @@ def _parse_test(test_def: dict, base_dir: Path) -> TestCase:
         rows_path = (base_dir / expect_def["rows_file"]).resolve()
         if not rows_path.is_file():
             raise FileNotFoundError(f"Test '{name}': expect rows_file not found: {rows_path}")
-        from file_readers import read_rows_file
+        from flink_unittest.file_readers import read_rows_file
         expect_rows = read_rows_file(rows_path)
     else:
         expect_rows = expect_def.get("rows", [])

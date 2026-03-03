@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
-from models import TestCase
+from flink_unittest.models import TestCase
 
 # SQLGlot is optional -- AST-based rules are skipped if not installed
 try:

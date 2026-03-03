@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flink-unittest"
+version = "0.1.0"
+description = "Unit test your Flink SQL with YAML-defined fixtures"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+keywords = ["flink", "sql", "testing", "unit-test"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "duckdb>=0.9.0",
+]
+
+[project.optional-dependencies]
+lint = ["sqlglot>=20.0"]
+parquet = ["pyarrow>=14.0"]
+avro = ["fastavro>=1.9.0"]
+flink = ["apache-flink>=1.18.0"]
+all = [
+    "sqlglot>=20.0",
+    "pyarrow>=14.0",
+    "fastavro>=1.9.0",
+]
+
+[project.scripts]
+flink-unittest = "flink_unittest.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+flink_unittest = [
+    "examples/*.yaml",
+    "examples/*.yml",
+    "examples/sql/*.sql",
+    "examples/data/*.csv",
+    "examples/data/*.json",
+    "examples/data/*.jsonl",
+    "examples/data/*.parquet",
+    "examples/data/*.avro",
+]

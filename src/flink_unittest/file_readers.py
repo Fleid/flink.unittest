@@ -7,7 +7,7 @@ import csv
 import json
 from pathlib import Path
 
-from models import ColumnSchema
+from flink_unittest.models import ColumnSchema
 
 
 # Flink SQL types that map to Python int
@@ -20,7 +20,7 @@ _FLOAT_TYPES = {"FLOAT", "DOUBLE"}
 def _auto_coerce_value(value: str):
     """Auto-coerce a CSV string value to a Python type.
 
-    Tries int → float → bool → None (empty) → string.
+    Tries int -> float -> bool -> None (empty) -> string.
     This matches what YAML does implicitly when parsing inline values.
     """
     if value == "":
@@ -119,7 +119,7 @@ def _read_avro(path: Path) -> list[dict]:
 # Entry point
 # ---------------------------------------------------------------------------
 
-# Extension → reader function
+# Extension -> reader function
 _READERS = {
     ".csv": lambda p, s: _read_csv(p, s),
     ".json": lambda p, s: _read_json(p),

@@ -2,12 +2,12 @@
 """Flink SQL Test Runner -- unit test your Flink SQL with YAML-defined fixtures.
 
 Usage:
-    python flink_sql_test.py tests/                     # Run all tests in directory
-    python flink_sql_test.py tests/test_basic.yaml      # Run a specific test file
-    python flink_sql_test.py tests/ --backend duckdb     # Force DuckDB backend
-    python flink_sql_test.py tests/ --backend flink      # Force PyFlink backend
-    python flink_sql_test.py tests/ --strict             # Enforce strict column projection
-    python flink_sql_test.py tests/ --lint               # Run SQL lint checks before execution
+    flink-unittest tests/                     # Run all tests in directory
+    flink-unittest tests/test_basic.yaml      # Run a specific test file
+    flink-unittest tests/ --backend duckdb     # Force DuckDB backend
+    flink-unittest tests/ --backend flink      # Force PyFlink backend
+    flink-unittest tests/ --strict             # Enforce strict column projection
+    flink-unittest tests/ --lint               # Run SQL lint checks before execution
 """
 
 import argparse
@@ -16,8 +16,8 @@ import sys
 import time
 from pathlib import Path
 
-from models import load_tests, TestCase
-from comparator import compare_results
+from flink_unittest.models import load_tests, TestCase
+from flink_unittest.comparator import compare_results
 
 # Streaming SQL patterns that require the Flink backend
 STREAMING_PATTERNS = re.compile(
@@ -40,10 +40,10 @@ def detect_backend(test: TestCase) -> str:
 def get_backend(name: str):
     """Lazy-load and return a backend instance."""
     if name == "duckdb":
-        from backends.duckdb_backend import DuckDBBackend
+        from flink_unittest.backends.duckdb_backend import DuckDBBackend
         return DuckDBBackend()
     elif name == "flink":
-        from backends.flink_backend import FlinkBackend
+        from flink_unittest.backends.flink_backend import FlinkBackend
         return FlinkBackend()
     else:
         raise ValueError(f"Unknown backend: {name}")
@@ -108,7 +108,7 @@ def main():
     # Set up linter if requested
     lint_enabled = args.lint
     if lint_enabled:
-        from linter import lint_available, lint_test, LintLevel
+        from flink_unittest.linter import lint_available, lint_test, LintLevel
         if not lint_available():
             print(f"{YELLOW}Lint: sqlglot not installed -- only context-based checks will run. "
                   f"Install with: pip install sqlglot{RESET}")

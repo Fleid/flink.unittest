@@ -5,8 +5,8 @@ import re
 import tempfile
 from pathlib import Path
 
-from backends.base import Backend
-from models import TestCase, TableInput
+from flink_unittest.backends.base import Backend
+from flink_unittest.models import TestCase, TableInput
 
 try:
     from pyflink.table import EnvironmentSettings, TableEnvironment
@@ -91,7 +91,7 @@ class FlinkBackend(Backend):
         if not PYFLINK_AVAILABLE:
             raise ImportError(
                 "PyFlink is not installed. Install with: pip install apache-flink\n"
-                "Or use the DuckDB backend: python flink_sql_test.py --backend duckdb"
+                "Or use the DuckDB backend: flink-unittest --backend duckdb"
             )
         self._batch_env = None
         self._streaming_env = None
