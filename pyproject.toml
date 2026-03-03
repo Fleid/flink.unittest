@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flink-unittest"
-version = "0.2.0"
+version = "0.2.1"
 description = "Unit test your Flink SQL with YAML-defined fixtures"
 readme = "README.md"
 license = "Apache-2.0"
