@@ -24,6 +24,8 @@ pip install --no-build-isolation apache-flink
 flink-unittest examples/
 ```
 
+If you don't have Python 3.11 installed, you can get it via [pyenv](https://github.com/pyenv/pyenv) (`pyenv install 3.11`) or Homebrew (`brew install python@3.11`).
+
 Other optional dependency groups:
 
 ```bash
