@@ -4,7 +4,7 @@ Unit test your Flink SQL with YAML-defined fixtures. Inspired by [dbt unit tests
 
 The tool ships with two backends. **DuckDB** is included by default and provides fast, in-process execution for the most common SQL patterns (filters, joins, aggregations, window functions). **PyFlink** offers full Flink SQL compatibility including streaming operations (TUMBLE/HOP windows, temporal joins, MATCH_RECOGNIZE), but requires a separate install step in a Python 3.11 virtualenv due to `apache-flink`'s dependency constraints.
 
-> **Note:** The DuckDB backend is not a full Flink SQL emulator. It uses Apache Arrow as a canonical type layer to map Flink SQL types to DuckDB (zero-copy, no SQL DDL generation), which covers most standard SQL patterns. However, SQL syntax differences exist (e.g. Flink requires `<>` not `!=`), and some constructs like `CROSS JOIN UNNEST` need the PyFlink backend. Use DuckDB for fast iteration, `--backend flink` for full compatibility. See [Type handling and dialect caveats](#type-handling-and-dialect-caveats) for details.
+> **Note:** The DuckDB backend is not a full Flink SQL emulator. It uses Apache Arrow as a canonical type layer to map Flink SQL types to DuckDB, which covers most standard SQL patterns. However, SQL syntax differences exist (e.g. Flink requires `<>` not `!=`), and some constructs like `CROSS JOIN UNNEST` need the PyFlink backend. Use DuckDB for fast iteration, `--backend flink` for full compatibility. See [Type handling and dialect caveats](#type-handling-and-dialect-caveats) for details.
 
 ## Installation
 
@@ -300,7 +300,7 @@ Tests that require PyFlink are gracefully skipped if it's not installed.
 
 ### Type handling and dialect caveats
 
-The DuckDB backend uses Apache Arrow as a canonical type layer. Flink SQL type strings are parsed into Arrow types, input tables are built as `pa.Table` and registered with DuckDB via zero-copy `conn.register()`, and results are extracted via `fetch_arrow_table()`. This eliminates SQL DDL generation and string escaping entirely.
+The DuckDB backend uses Apache Arrow as a canonical type layer. Flink SQL type strings are parsed into Arrow types, input tables are built and registered with DuckDB via zero-copy, and results are extracted via `fetch_arrow_table()`. This eliminates SQL DDL generation and string escaping entirely.
 
 **Supported type mappings:**
 
