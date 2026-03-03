@@ -4,17 +4,7 @@ Unit test your Flink SQL with YAML-defined fixtures. Inspired by [dbt unit tests
 
 The tool ships with two backends. **DuckDB** is included by default and provides fast, in-process execution for the most common SQL patterns (filters, joins, aggregations, window functions). **PyFlink** offers full Flink SQL compatibility including streaming operations (TUMBLE/HOP windows, temporal joins, MATCH_RECOGNIZE), but requires a separate install step in a Python 3.11 virtualenv due to `apache-flink`'s dependency constraints.
 
-### Type handling and SQL dialect caveats
-
-> **Warning:** The DuckDB backend is not a full Flink SQL emulator. Be aware of these differences when writing tests:
-
-**SQL syntax** -- DuckDB uses standard SQL, which differs from Flink SQL in some cases. For example, Flink SQL requires `<>` for "not equal" while DuckDB also accepts `!=`. A test that passes on DuckDB may fail on Flink (or on Confluent Cloud) due to parser differences.
-
-**Type coercion** -- Flink SQL types are mapped to DuckDB types at table creation time (`STRING`→`VARCHAR`, `TIMESTAMP(3)`→`TIMESTAMP`, `TIMESTAMP_LTZ(3)`→`TIMESTAMP WITH TIME ZONE`, etc.). The comparator normalizes results before asserting (`Decimal`→`float`, `datetime`→`str`, floats rounded to 6 decimal places) to absorb differences in what each backend returns. Despite this, edge cases with precision, timezone handling, or `NULL` semantics may produce different results across backends.
-
-**Complex types** -- `ARRAY<ROW<...>>`, `MAP`, and nested `ROW` types work with the PyFlink backend but are not supported by DuckDB. Use `backend: flink` or an explicit schema with these types.
-
-**Recommendation** -- Use DuckDB for fast iteration on standard SQL logic (filters, joins, aggregations). When you need to validate full Flink SQL compatibility -- especially for production queries running on Confluent Cloud -- run with `--backend flink` to catch dialect-specific issues.
+> **Note:** The DuckDB backend is not a full Flink SQL emulator. It uses Apache Arrow as a canonical type layer to map Flink SQL types to DuckDB (zero-copy, no SQL DDL generation), which covers most standard SQL patterns. However, SQL syntax differences exist (e.g. Flink requires `<>` not `!=`), and some constructs like `CROSS JOIN UNNEST` need the PyFlink backend. Use DuckDB for fast iteration, `--backend flink` for full compatibility. See [Type handling and dialect caveats](#type-handling-and-dialect-caveats) for details.
 
 ## Installation
 
@@ -202,7 +192,7 @@ Supported formats:
 | `.csv` | CSV with header row | None (stdlib) |
 | `.json` | JSON array of objects | None (stdlib) |
 | `.jsonl`, `.ndjson` | Newline-delimited JSON | None (stdlib) |
-| `.parquet` | Apache Parquet | `pip install pyarrow` |
+| `.parquet` | Apache Parquet | Included (pyarrow) |
 | `.avro` | Apache Avro | `pip install fastavro` |
 
 `rows` and `rows_file` are mutually exclusive. Paths are resolved relative to the YAML file's directory.
@@ -308,6 +298,33 @@ The default (`--backend auto`) selects the backend per test:
 
 Tests that require PyFlink are gracefully skipped if it's not installed.
 
+### Type handling and dialect caveats
+
+The DuckDB backend uses Apache Arrow as a canonical type layer. Flink SQL type strings are parsed into Arrow types, input tables are built as `pa.Table` and registered with DuckDB via zero-copy `conn.register()`, and results are extracted via `fetch_arrow_table()`. This eliminates SQL DDL generation and string escaping entirely.
+
+**Supported type mappings:**
+
+| Flink SQL type | Arrow type |
+|---|---|
+| `STRING`, `VARCHAR`, `VARCHAR(n)` | `string` |
+| `BOOLEAN` | `bool` |
+| `TINYINT`, `SMALLINT`, `INT`/`INTEGER`, `BIGINT` | `int8`..`int64` |
+| `FLOAT`, `DOUBLE` | `float32`, `float64` |
+| `DECIMAL(p,s)` | `decimal128(p,s)` |
+| `DATE` | `date32` |
+| `TIMESTAMP`, `TIMESTAMP(p)` | `timestamp[us]` |
+| `TIMESTAMP_LTZ(p)` | `timestamp[us, tz=UTC]` |
+| `ARRAY<T>` | `list(T)` -- recursive |
+| `MAP<K,V>` | `map(K, V)` -- recursive |
+| `ROW<f1 T1, f2 T2>` | `struct({f1: T1, f2: T2})` -- recursive |
+
+**Value coercion** -- YAML and CSV data arrives as Python primitives. The Arrow layer coerces values automatically: timestamp strings (e.g. `'2024-01-01 10:05:00'`) are parsed to `datetime`, numeric values to `Decimal` for decimal columns, and nested structures for `ARRAY`/`MAP`/`ROW` types. The comparator normalizes results before asserting (`Decimal`→`float`, `datetime`→`str`, floats rounded to 6 decimal places) to absorb differences in what each backend returns.
+
+**SQL syntax differences** -- DuckDB uses standard SQL, which differs from Flink SQL in some cases. For example, Flink SQL requires `<>` for "not equal" while DuckDB also accepts `!=`. A test that passes on DuckDB may fail on Flink (or on Confluent Cloud) due to parser differences.
+
+**Complex types** -- `ARRAY<T>`, `MAP<K,V>`, and nested `ROW` types work on both backends. DuckDB receives them as native Arrow structures via zero-copy registration. `CROSS JOIN UNNEST` on `ARRAY<ROW<...>>` still requires the PyFlink backend (`backend: flink`) due to DuckDB syntax differences.
+
+Edge cases with precision, timezone handling, or `NULL` semantics may still produce different results across backends. When you need to validate full Flink SQL compatibility -- especially for production queries running on Confluent Cloud -- run with `--backend flink`.
 
 ## CLI usage
 
@@ -416,6 +433,7 @@ flink-unittest/
 │   ├── __main__.py             # python -m flink_unittest support
 │   ├── cli.py                  # CLI entry point
 │   ├── models.py               # YAML parsing + data models
+│   ├── arrow_types.py          # Flink SQL → Arrow type mapping + value coercion
 │   ├── comparator.py           # Result comparison + diff output
 │   ├── linter.py               # SQL lint rules (AST + context-based)
 │   ├── file_readers.py         # External data file readers (CSV, JSON, Parquet, Avro)
